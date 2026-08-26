@@ -525,6 +525,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const newStaffLastName = document.getElementById("newStaffLastName");
       const newStaffEmail = document.getElementById("newStaffEmail");
       const newStaffRole = document.getElementById("newStaffRole");
+      const newStaffPermissionRole = document.getElementById("newStaffPermissionRole");
       const staffFormFeedback = document.getElementById("staffFormFeedback");
 
       const tasksView = document.getElementById("tasksView");
@@ -1564,9 +1565,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         const lastName = newStaffLastName.value.trim();
         const email = (newStaffEmail?.value || "").trim().toLowerCase();
         const role = newStaffRole.value.trim();
+        const selectedPermissionRole = PERMISSION_ROLES.includes(newStaffPermissionRole?.value)
+          ? newStaffPermissionRole.value
+          : DEFAULT_STAFF_PERMISSION_ROLE;
         const name = [firstName, lastName].filter(Boolean).join(" ").trim();
         const nameInputs = [newStaffFirstName, newStaffLastName];
-        const allInputs = [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffRole].filter(Boolean);
+        const allInputs = [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffRole, newStaffPermissionRole].filter(Boolean);
 
         if (!name) {
           showFormFeedback(
@@ -1619,7 +1623,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               lastName,
               email,
               jobTitle: role,
-              permissionRole: DEFAULT_STAFF_PERMISSION_ROLE
+              permissionRole: selectedPermissionRole
             })
           });
 
@@ -1635,7 +1639,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             firstName: member?.firstName || firstName,
             lastName: member?.lastName || lastName,
             role: member?.jobTitle || role,
-            permissionRole: member?.permissionRole || DEFAULT_STAFF_PERMISSION_ROLE,
+            permissionRole: member?.permissionRole || selectedPermissionRole,
             email: payload.email || email,
             inviteStatus: "pending"
           };
@@ -1647,6 +1651,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           newStaffLastName.value = "";
           if (newStaffEmail) newStaffEmail.value = "";
           newStaffRole.value = "";
+          if (newStaffPermissionRole) newStaffPermissionRole.value = DEFAULT_STAFF_PERMISSION_ROLE;
 
           populateStaffFilter();
           populateCurrentUserSelect();
@@ -4982,7 +4987,16 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         });
       });
 
-      [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffRole].filter(Boolean).forEach(input => {
+      if (newStaffPermissionRole) {
+        newStaffPermissionRole.addEventListener("change", () => {
+          clearFormFeedback(
+            [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffPermissionRole].filter(Boolean),
+            staffFormFeedback
+          );
+        });
+      }
+
+      [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffRole, newStaffPermissionRole].filter(Boolean).forEach(input => {
         input.addEventListener("keydown", e => {
           if (e.key === "Enter") {
             e.preventDefault();

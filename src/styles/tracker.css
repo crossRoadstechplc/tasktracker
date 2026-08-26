@@ -3112,7 +3112,7 @@
     /* Add Team Member uses the same profile fields as Configure */
     .add-team-member-toolbar {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+      grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
       gap: 10px;
       align-items: end;
     }
@@ -3126,7 +3126,8 @@
       min-width: 0;
     }
 
-    .add-team-member-field input {
+    .add-team-member-field input,
+    .add-team-member-field select {
       width: 100%;
       box-sizing: border-box;
       padding: 7px 8px;
@@ -4025,6 +4026,50 @@
 
     .login-field input {
       width: 100%;
+    }
+
+    .login-password-wrap {
+      position: relative;
+      display: block;
+      width: 100%;
+    }
+
+    .login-password-wrap input {
+      width: 100%;
+      padding-right: 48px;
+      box-sizing: border-box;
+    }
+
+    .login-password-toggle {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #555555;
+      cursor: pointer;
+      line-height: 0;
+    }
+
+    .login-password-toggle svg {
+      display: block;
+      pointer-events: none;
+    }
+
+    .login-password-toggle:hover,
+    .login-password-toggle:focus-visible {
+      color: #111111;
+      background: rgba(0, 0, 0, 0.06);
+      outline: none;
     }
 
     .login-submit {
