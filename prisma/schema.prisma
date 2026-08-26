@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PermissionRole {
+  SUPER_ADMIN
+  ADMIN
+  LEAD
+  SENIOR_STAFF
+  JUNIOR_STAFF
+}
+
+enum TaskStatus {
+  TO_DO
+  IN_PROGRESS
+  DONE
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  slug      String   @unique @default("default")
+  name      String   @default("Company Task Tracker")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staffMembers    StaffMember[]
+  projects        Project[]
+  orgTeams        OrgTeam[]
+  tasks           Task[]
+  deletedTasks    DeletedTask[]
+  archivedTasks   ArchivedTask[]
+  scheduleEvents  ScheduleEvent[]
+  permissionRules PermissionRule[]
+}
+
+model StaffMember {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  userId         String?        @unique
+  displayName    String
+  firstName      String
+  lastName       String         @default("")
+  jobTitle       String         @default("")
+  permissionRole PermissionRole @default(JUNIOR_STAFF)
+  sortOrder      Int            @default(0)
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ownedTasks      TaskOwner[]
+  taskUpdates     TaskUpdate[]
+  projectMembers  ProjectMember[]
+  orgTeamMembers  OrgTeamMember[]
+  ledProjects     Project[]            @relation("ProjectLeader")
+  scheduleGuests  ScheduleEventGuest[]
+
+  @@unique([workspaceId, displayName])
+  @@index([workspaceId, sortOrder])
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String
+  mustChangePassword Boolean   @default(false)
+  inviteTokenHash    String?   @unique
+  inviteExpiresAt    DateTime?
+  invitedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  staffMember   StaffMember?
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Project {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  sortOrder   Int    @default(0)
+  leaderId    String?
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leader    StaffMember?    @relation("ProjectLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  members   ProjectMember[]
+  tasks     Task[]
+  events    ScheduleEvent[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, sortOrder])
+}
+
+model ProjectMember {
+  projectId     String
+  staffMemberId String
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, staffMemberId])
+}
+
+model OrgTeam {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  sortOrder   Int    @default(0)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   OrgTeamMember[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, sortOrder])
+}
+
+model OrgTeamMember {
+  orgTeamId     String
+  staffMemberId String
+
+  orgTeam     OrgTeam     @relation(fields: [orgTeamId], references: [id], onDelete: Cascade)
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+
+  @@id([orgTeamId, staffMemberId])
+}
+
+model Task {
+  id          String     @id
+  workspaceId String
+  projectId   String
+  title       String
+  description String     @default("")
+  priority    String
+  due         String     @default("")
+  status      TaskStatus
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  owners    TaskOwner[]
+  updates   TaskUpdate[]
+
+  @@index([workspaceId, status, sortOrder])
+}
+
+model TaskOwner {
+  taskId        String
+  staffMemberId String
+  sortOrder     Int @default(0)
+
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, staffMemberId])
+}
+
+model TaskUpdate {
+  id            String   @id
+  taskId        String
+  staffMemberId String?
+  text          String
+  createdAt     DateTime
+
+  task        Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  staffMember StaffMember? @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+}
+
+model DeletedTask {
+  trashId        String   @id
+  workspaceId    String
+  previousStatus String
+  deletedAt      DateTime
+  payload        Json
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, deletedAt])
+}
+
+model ArchivedTask {
+  archivedId  String   @id
+  workspaceId String
+  archivedAt  DateTime
+  payload     Json
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, archivedAt])
+}
+
+model ScheduleEvent {
+  id          String   @id
+  workspaceId String
+  projectId   String?
+  title       String
+  start       DateTime
+  end         DateTime
+  allDay      Boolean  @default(false)
+  description String   @default("")
+  location    String   @default("")
+  color       String
+
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  guests    ScheduleEventGuest[]
+
+  @@index([workspaceId, start])
+}
+
+model ScheduleEventGuest {
+  eventId       String
+  staffMemberId String
+
+  event       ScheduleEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  staffMember StaffMember   @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, staffMemberId])
+}
+
+model PermissionRule {
+  id          String         @id @default(cuid())
+  workspaceId String
+  role        PermissionRole
+  actionId    String
+  allowed     Boolean
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, role, actionId])
+}
