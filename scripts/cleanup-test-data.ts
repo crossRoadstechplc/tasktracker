@@ -59,19 +59,18 @@ async function main() {
     where: { workspaceId: workspace.id },
   });
   const testArchivedTasks = allArchivedTasks.filter((row) => payloadHasE2eTitle(row.payload));
-  const candidateTestProjects = await prisma.project.findMany({
+  const testProjects = await prisma.project.findMany({
     where: {
       workspaceId: workspace.id,
       name: { startsWith: "e2e-", mode: "insensitive" },
     },
-    include: { tasks: { select: { id: true, title: true } } },
+    include: {
+      tasks: { select: { id: true, title: true } },
+      events: { select: { id: true, title: true } },
+    },
   });
-  const testProjects = candidateTestProjects.filter((project) =>
-    project.tasks.every((task) => isE2eTitle(task.title)),
-  );
-  const skippedProjects = candidateTestProjects.filter(
-    (project) => !testProjects.some((candidate) => candidate.id === project.id),
-  );
+  const projectTaskIds = testProjects.flatMap((project) => project.tasks.map((task) => task.id));
+  const projectScheduleIds = testProjects.flatMap((project) => project.events.map((event) => event.id));
   const testOrgTeams = await prisma.orgTeam.findMany({
     where: {
       workspaceId: workspace.id,
@@ -132,11 +131,11 @@ async function main() {
   }
   console.log("  Archived tasks:", testArchivedTasks.length);
   console.log("  Test projects:", testProjects.map((p) => p.name).join(", ") || "(none)");
-  if (skippedProjects.length > 0) {
+  if (testProjects.length > 0) {
     console.log(
-      "  Skipped projects (real tasks remain):",
-      skippedProjects
-        .map((p) => `${p.name} (${p.tasks.map((t) => t.title).join(", ")})`)
+      "    with tasks:",
+      testProjects
+        .map((p) => `${p.name} (${p.tasks.map((t) => t.title).join(", ") || "empty"})`)
         .join("; "),
     );
   }
@@ -147,7 +146,7 @@ async function main() {
 
   await prisma.$transaction(
     async (tx) => {
-    const testTaskIds = testTasks.map((t) => t.id);
+    const testTaskIds = [...new Set([...testTasks.map((t) => t.id), ...projectTaskIds])];
     if (testTaskIds.length > 0) {
       await tx.taskUpdate.deleteMany({ where: { taskId: { in: testTaskIds } } });
       await tx.taskOwner.deleteMany({ where: { taskId: { in: testTaskIds } } });
@@ -164,7 +163,9 @@ async function main() {
       });
     }
 
-    const testScheduleIds = testScheduleEvents.map((event) => event.id);
+    const testScheduleIds = [
+      ...new Set([...testScheduleEvents.map((event) => event.id), ...projectScheduleIds]),
+    ];
     if (testScheduleIds.length > 0) {
       await tx.scheduleEventGuest.deleteMany({
         where: { eventId: { in: testScheduleIds } },
