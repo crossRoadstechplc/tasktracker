@@ -27,3 +27,12 @@ export const TaskStatus = {
 } as const
 
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus]
+
+
+export const NotificationType = {
+  TASK_ASSIGNED: 'TASK_ASSIGNED',
+  PROJECT_ASSIGNED: 'PROJECT_ASSIGNED',
+  SCHEDULE_INVITED: 'SCHEDULE_INVITED'
+} as const
+
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType]

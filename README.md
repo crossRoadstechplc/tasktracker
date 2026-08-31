@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SPX Task Tracker
 
-## Getting Started
+Next.js app with PostgreSQL (Neon), JWT cookie auth, email invites, and incremental REST APIs with SSE realtime.
 
-First, run the development server:
+## Local setup
+
+1. Copy `.env.example` to `.env` and fill in values (or use your existing Neon `.env`).
+2. Apply migrations and seed:
+
+```bash
+npm install
+npm run db:deploy
+npm run db:seed
+npm run db:seed:auth
+```
+
+3. Start the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Seed auth users use `@tracker.local` emails (see `src/lib/auth/seed-users.ts`) with password `ChangeMe123!`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Realtime (SSE)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Live updates use **Server-Sent Events** at `GET /api/events` (cookie session required). Mutations publish through Postgres `LISTEN/NOTIFY`.
 
-## Learn More
+Neon pooler URLs cannot `LISTEN`. The app derives a direct URL from `DATABASE_URL` by stripping `-pooler.` from the host. If that fails, set `DIRECT_URL` in `.env` to the same database using the non-pooler host.
 
-To learn more about Next.js, take a look at the following resources:
+## API overview
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Area | Routes |
+|------|--------|
+| Auth | `POST /api/auth/login`, `logout`, `GET me`, `accept-invite`, `change-password` |
+| Workspace | `GET/PUT /api/workspace`, `POST /api/workspace/import` |
+| Health / realtime | `GET /api/health`, `GET /api/events` |
+| Tasks | `POST /api/tasks`, `PATCH/DELETE /api/tasks/:id`, `move`, `updates`, `archive` |
+| Trash | `POST /api/trash/:trashId/restore` |
+| Schedule | `POST/PATCH/DELETE /api/schedule/:id` |
+| Projects / org teams | CRUD + members |
+| Staff | `invite`, `PATCH/DELETE /api/staff/:id`, `role`, `resend-invite` |
+| Permissions | `PUT /api/permissions` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`GET /api/workspace` returns the legacy flat document. Workspace revision is in `ETag` / `X-Workspace-Revision` headers.
 
-## Deploy on Vercel
+## Tests
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run test          # unit tests
+npm run test:e2e      # HTTP e2e (starts server if needed)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`test:e2e` starts (or reuses) the API server, runs Vitest, then tears down any server it spawned. It reuses `:3000` if `npm run dev` is already running; otherwise it starts one on `:3099`. No dev server required beforehand.
+
+## Production notes
+
+- Login is rate-limited (20 attempts per IP/email per 15 minutes).
+- Auth cookies use `secure` only when `NODE_ENV=production`.
+- For SSE behind nginx, disable buffering on `/api/events` (`proxy_buffering off`).

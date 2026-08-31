@@ -398,6 +398,7 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 
 export const ModelName = {
   Workspace: 'Workspace',
+  WorkspaceEvent: 'WorkspaceEvent',
   StaffMember: 'StaffMember',
   User: 'User',
   RefreshToken: 'RefreshToken',
@@ -412,7 +413,8 @@ export const ModelName = {
   ArchivedTask: 'ArchivedTask',
   ScheduleEvent: 'ScheduleEvent',
   ScheduleEventGuest: 'ScheduleEventGuest',
-  PermissionRule: 'PermissionRule'
+  PermissionRule: 'PermissionRule',
+  Notification: 'Notification'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -428,7 +430,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "workspace" | "staffMember" | "user" | "refreshToken" | "project" | "projectMember" | "orgTeam" | "orgTeamMember" | "task" | "taskOwner" | "taskUpdate" | "deletedTask" | "archivedTask" | "scheduleEvent" | "scheduleEventGuest" | "permissionRule"
+    modelProps: "workspace" | "workspaceEvent" | "staffMember" | "user" | "refreshToken" | "project" | "projectMember" | "orgTeam" | "orgTeamMember" | "task" | "taskOwner" | "taskUpdate" | "deletedTask" | "archivedTask" | "scheduleEvent" | "scheduleEventGuest" | "permissionRule" | "notification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -503,6 +505,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspaceEvent: {
+      payload: Prisma.$WorkspaceEventPayload<ExtArgs>
+      fields: Prisma.WorkspaceEventFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceEventFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceEventFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceEventFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceEventFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceEventFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceEventCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceEventCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceEventCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceEventDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceEventUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceEventDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceEventUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceEventUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceEventUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceEventPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceEventAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceEvent>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceEventGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceEventGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceEventCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceEventCountAggregateOutputType> | number
         }
       }
     }
@@ -1616,6 +1692,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    Notification: {
+      payload: Prisma.$NotificationPayload<ExtArgs>
+      fields: Prisma.NotificationFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.NotificationFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.NotificationFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        findFirst: {
+          args: Prisma.NotificationFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.NotificationFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        findMany: {
+          args: Prisma.NotificationFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>[]
+        }
+        create: {
+          args: Prisma.NotificationCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        createMany: {
+          args: Prisma.NotificationCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.NotificationCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>[]
+        }
+        delete: {
+          args: Prisma.NotificationDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        update: {
+          args: Prisma.NotificationUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        deleteMany: {
+          args: Prisma.NotificationDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.NotificationUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.NotificationUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>[]
+        }
+        upsert: {
+          args: Prisma.NotificationUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        aggregate: {
+          args: Prisma.NotificationAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateNotification>
+        }
+        groupBy: {
+          args: Prisma.NotificationGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.NotificationCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1659,11 +1809,28 @@ export const WorkspaceScalarFieldEnum = {
   id: 'id',
   slug: 'slug',
   name: 'name',
+  revision: 'revision',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
+
+
+export const WorkspaceEventScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  revision: 'revision',
+  type: 'type',
+  resource: 'resource',
+  resourceId: 'resourceId',
+  payload: 'payload',
+  actorUserId: 'actorUserId',
+  actorClientId: 'actorClientId',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceEventScalarFieldEnum = (typeof WorkspaceEventScalarFieldEnum)[keyof typeof WorkspaceEventScalarFieldEnum]
 
 
 export const StaffMemberScalarFieldEnum = {
@@ -1837,6 +2004,23 @@ export const PermissionRuleScalarFieldEnum = {
 export type PermissionRuleScalarFieldEnum = (typeof PermissionRuleScalarFieldEnum)[keyof typeof PermissionRuleScalarFieldEnum]
 
 
+export const NotificationScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  recipientId: 'recipientId',
+  type: 'type',
+  title: 'title',
+  body: 'body',
+  resourceType: 'resourceType',
+  resourceId: 'resourceId',
+  actorStaffId: 'actorStaffId',
+  readAt: 'readAt',
+  createdAt: 'createdAt'
+} as const
+
+export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -1860,14 +2044,6 @@ export const QueryMode = {
 export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
 
 
-export const NullsOrder = {
-  first: 'first',
-  last: 'last'
-} as const
-
-export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
-
-
 export const JsonNullValueFilter = {
   DbNull: DbNull,
   JsonNull: JsonNull,
@@ -1875,6 +2051,14 @@ export const JsonNullValueFilter = {
 } as const
 
 export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
+
+
+export const NullsOrder = {
+  first: 'first',
+  last: 'last'
+} as const
+
+export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
 
 
 
@@ -1898,6 +2082,20 @@ export type ListStringFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaMod
 
 
 /**
+ * Reference to a field of type 'Int'
+ */
+export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
+    
+
+
+/**
+ * Reference to a field of type 'Int[]'
+ */
+export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
+    
+
+
+/**
  * Reference to a field of type 'DateTime'
  */
 export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
@@ -1912,6 +2110,20 @@ export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
 
 
 /**
+ * Reference to a field of type 'Json'
+ */
+export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+/**
+ * Reference to a field of type 'QueryMode'
+ */
+export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
  * Reference to a field of type 'PermissionRole'
  */
 export type EnumPermissionRoleFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PermissionRole'>
@@ -1922,20 +2134,6 @@ export type EnumPermissionRoleFieldRefInput<$PrismaModel> = FieldRefInputType<$P
  * Reference to a field of type 'PermissionRole[]'
  */
 export type ListEnumPermissionRoleFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PermissionRole[]'>
-    
-
-
-/**
- * Reference to a field of type 'Int'
- */
-export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
-    
-
-
-/**
- * Reference to a field of type 'Int[]'
- */
-export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
     
 
 
@@ -1961,16 +2159,16 @@ export type ListEnumTaskStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$P
 
 
 /**
- * Reference to a field of type 'Json'
+ * Reference to a field of type 'NotificationType'
  */
-export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+export type EnumNotificationTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationType'>
     
 
 
 /**
- * Reference to a field of type 'QueryMode'
+ * Reference to a field of type 'NotificationType[]'
  */
-export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+export type ListEnumNotificationTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationType[]'>
     
 
 
@@ -2139,6 +2337,7 @@ export interface PrismaClientOptionsWithAdapter extends PrismaClientBaseOptions 
 export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaClientOptionsWithAdapter
 export type GlobalOmitConfig = {
   workspace?: Prisma.WorkspaceOmit
+  workspaceEvent?: Prisma.WorkspaceEventOmit
   staffMember?: Prisma.StaffMemberOmit
   user?: Prisma.UserOmit
   refreshToken?: Prisma.RefreshTokenOmit
@@ -2154,6 +2353,7 @@ export type GlobalOmitConfig = {
   scheduleEvent?: Prisma.ScheduleEventOmit
   scheduleEventGuest?: Prisma.ScheduleEventGuestOmit
   permissionRule?: Prisma.PermissionRuleOmit
+  notification?: Prisma.NotificationOmit
 }
 
 /* Types for Logging */

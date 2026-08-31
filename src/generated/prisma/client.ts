@@ -47,6 +47,11 @@ export { Prisma }
  */
 export type Workspace = Prisma.WorkspaceModel
 /**
+ * Model WorkspaceEvent
+ * 
+ */
+export type WorkspaceEvent = Prisma.WorkspaceEventModel
+/**
  * Model StaffMember
  * 
  */
@@ -121,3 +126,8 @@ export type ScheduleEventGuest = Prisma.ScheduleEventGuestModel
  * 
  */
 export type PermissionRule = Prisma.PermissionRuleModel
+/**
+ * Model Notification
+ * 
+ */
+export type Notification = Prisma.NotificationModel

@@ -9,6 +9,7 @@ import {
 } from "@/src/lib/auth/session";
 import { prisma } from "@/src/lib/prisma";
 import { PERMISSION_ROLE_FROM_DB } from "@/src/lib/workspace/roles";
+import { checkLoginRateLimit } from "@/src/lib/auth/rate-limit";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -68,6 +69,14 @@ export async function POST(request: Request) {
 
   try {
     const email = parsed.data.email.trim().toLowerCase();
+
+    if (checkLoginRateLimit(request, email)) {
+      return NextResponse.json(
+        { error: "Too many sign-in attempts. Try again later." },
+        { status: 429 },
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
       include: { staffMember: true },

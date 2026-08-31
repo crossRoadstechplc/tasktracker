@@ -48,6 +48,15 @@ export async function sendInviteEmail(input: {
   text: string;
   html?: string;
 }): Promise<void> {
+  await sendNotificationEmail(input);
+}
+
+export async function sendNotificationEmail(input: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}): Promise<void> {
   const config = getSmtpConfig();
   if (!config) {
     throw new Error(

@@ -1,0 +1,267 @@
+{
+  "app": "company-task-tracker",
+  "version": 1,
+  "exportedAt": "2026-08-26T05:44:58.339Z",
+  "data": {
+    "tasks": [
+      {
+        "id": "cb619ceb-d15d-4b6b-8680-ceb7a17ccd3c",
+        "title": "Update onboarding checklist",
+        "team": "Unassigned",
+        "owner": "Hana",
+        "priority": "Low",
+        "due": "",
+        "status": "Done",
+        "owners": [
+          "Hana"
+        ],
+        "updates": []
+      },
+      {
+        "id": "cd222f38-f216-43f5-aa5f-528acce5971f",
+        "title": "Make money this year",
+        "description": "Import business needs to pickup",
+        "team": "Unassigned",
+        "priority": "High",
+        "due": "2026-08-21",
+        "status": "In Progress",
+        "updates": [],
+        "owners": [],
+        "owner": ""
+      },
+      {
+        "id": "a5c2be61-3867-4166-af3b-a6099ca221f4",
+        "title": "Finalize Q3 operating plan",
+        "team": "Unassigned",
+        "owner": "Nebil Hailemaria",
+        "priority": "High",
+        "due": "2026-08-20",
+        "status": "Done",
+        "owners": [
+          "Nebil Hailemaria"
+        ],
+        "updates": [],
+        "description": "JSDfkjsddhkfj skdjfh"
+      }
+    ],
+    "teams": [
+      "Unassigned"
+    ],
+    "deletedTasks": [
+      {
+        "id": "06ad8a05-0314-414a-8871-bde4147e3944",
+        "title": "Prepare campaign content",
+        "team": "Unassigned",
+        "owner": "Sara",
+        "priority": "Low",
+        "due": "",
+        "status": "To Do",
+        "owners": [
+          "Sara"
+        ],
+        "updates": [],
+        "trashId": "c1f535ec-3257-454c-a410-2b99b572c373",
+        "previousStatus": "To Do",
+        "deletedAt": "2026-08-26T05:44:57.102Z"
+      }
+    ],
+    "archivedTasks": [
+      {
+        "id": "e8892cd2-b70f-423e-911b-97535faefbed",
+        "title": "Vendor payment reconciliation",
+        "team": "Unassigned",
+        "owner": "Ponu",
+        "priority": "Low",
+        "due": "",
+        "status": "Done",
+        "owners": [
+          "Ponu"
+        ],
+        "updates": [],
+        "archivedId": "9826dce4-4418-4c4a-b632-3dcaafa789e6",
+        "archivedAt": "2026-08-26T05:44:40.514Z"
+      }
+    ],
+    "staff": [
+      "Nebil Hailemaria",
+      "Ponu",
+      "Sara",
+      "Hana"
+    ],
+    "staffProfiles": {
+      "Ponu": {
+        "firstName": "Ponu",
+        "lastName": "",
+        "role": "",
+        "permissionRole": "Junior Staff"
+      },
+      "Sara": {
+        "firstName": "Sara",
+        "lastName": "",
+        "role": "",
+        "permissionRole": "Junior Staff"
+      },
+      "Hana": {
+        "firstName": "Hana",
+        "lastName": "",
+        "role": "",
+        "permissionRole": "Junior Staff"
+      },
+      "Nebil Hailemaria": {
+        "firstName": "Nebil",
+        "lastName": "Hailemaria",
+        "role": "",
+        "permissionRole": "Super Admin"
+      }
+    },
+    "teamMembers": {
+      "Unassigned": []
+    },
+    "teamLeaders": {
+      "Unassigned": ""
+    },
+    "orgTeams": [
+      "Operations"
+    ],
+    "orgTeamMembers": {
+      "Operations": [
+        "Nebil Hailemaria"
+      ]
+    },
+    "schedule": {
+      "events": []
+    },
+    "permissionMatrix": {
+      "Super Admin": {
+        "tasks.create": true,
+        "tasks.edit": true,
+        "tasks.move": true,
+        "tasks.delete": true,
+        "tasks.addUpdate": true,
+        "trash.restore": true,
+        "projects.create": true,
+        "projects.rename": true,
+        "projects.delete": true,
+        "projects.manageMembers": true,
+        "teams.create": true,
+        "teams.rename": true,
+        "teams.delete": true,
+        "teams.manageMembers": true,
+        "staff.create": true,
+        "staff.edit": true,
+        "staff.delete": true,
+        "staff.assignRole": true,
+        "schedule.create": true,
+        "schedule.edit": true,
+        "schedule.delete": true,
+        "backup.export": true,
+        "backup.import": true,
+        "settings.editPermissions": true
+      },
+      "Admin": {
+        "tasks.create": true,
+        "tasks.edit": true,
+        "tasks.move": true,
+        "tasks.delete": true,
+        "tasks.addUpdate": true,
+        "trash.restore": true,
+        "projects.create": true,
+        "projects.rename": true,
+        "projects.delete": true,
+        "projects.manageMembers": true,
+        "teams.create": true,
+        "teams.rename": true,
+        "teams.delete": true,
+        "teams.manageMembers": true,
+        "staff.create": true,
+        "staff.edit": true,
+        "staff.delete": true,
+        "staff.assignRole": true,
+        "schedule.create": true,
+        "schedule.edit": true,
+        "schedule.delete": true,
+        "backup.export": true,
+        "backup.import": true,
+        "settings.editPermissions": true
+      },
+      "Lead": {
+        "tasks.create": true,
+        "tasks.edit": true,
+        "tasks.move": true,
+        "tasks.delete": true,
+        "tasks.addUpdate": true,
+        "trash.restore": true,
+        "projects.create": false,
+        "projects.rename": false,
+        "projects.delete": false,
+        "projects.manageMembers": true,
+        "teams.create": false,
+        "teams.rename": false,
+        "teams.delete": false,
+        "teams.manageMembers": true,
+        "staff.create": false,
+        "staff.edit": false,
+        "staff.delete": false,
+        "staff.assignRole": false,
+        "schedule.create": true,
+        "schedule.edit": true,
+        "schedule.delete": true,
+        "backup.export": true,
+        "backup.import": false,
+        "settings.editPermissions": false
+      },
+      "Senior Staff": {
+        "tasks.create": true,
+        "tasks.edit": true,
+        "tasks.move": true,
+        "tasks.delete": false,
+        "tasks.addUpdate": true,
+        "trash.restore": false,
+        "projects.create": false,
+        "projects.rename": false,
+        "projects.delete": false,
+        "projects.manageMembers": false,
+        "teams.create": false,
+        "teams.rename": false,
+        "teams.delete": false,
+        "teams.manageMembers": false,
+        "staff.create": false,
+        "staff.edit": false,
+        "staff.delete": false,
+        "staff.assignRole": false,
+        "schedule.create": true,
+        "schedule.edit": true,
+        "schedule.delete": false,
+        "backup.export": true,
+        "backup.import": false,
+        "settings.editPermissions": false
+      },
+      "Junior Staff": {
+        "tasks.create": false,
+        "tasks.edit": false,
+        "tasks.move": true,
+        "tasks.delete": false,
+        "tasks.addUpdate": true,
+        "trash.restore": false,
+        "projects.create": false,
+        "projects.rename": false,
+        "projects.delete": false,
+        "projects.manageMembers": false,
+        "teams.create": false,
+        "teams.rename": false,
+        "teams.delete": false,
+        "teams.manageMembers": false,
+        "staff.create": false,
+        "staff.edit": false,
+        "staff.delete": false,
+        "staff.assignRole": false,
+        "schedule.create": false,
+        "schedule.edit": false,
+        "schedule.delete": false,
+        "backup.export": false,
+        "backup.import": false,
+        "settings.editPermissions": false
+      }
+    }
+  }
+}

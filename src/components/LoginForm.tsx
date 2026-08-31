@@ -42,6 +42,12 @@ function EyeIcon({ visible }: { visible: boolean }) {
   );
 }
 
+function safeNextPath(value: string | null): string {
+  if (!value) return "/";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/";
+  return value;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -82,7 +88,7 @@ export function LoginForm() {
         return;
       }
 
-      const nextPath = searchParams.get("next") || "/";
+      const nextPath = safeNextPath(searchParams.get("next"));
       router.replace(nextPath);
       router.refresh();
     } catch (submitError) {

@@ -4,16 +4,12 @@ import path from "node:path";
 import type { TrackerBackup } from "../src/types/workspace";
 import { seedAuthUsers } from "../src/lib/auth/seed-users";
 import { prisma } from "../src/lib/prisma";
+import { getTrackerBackupPath } from "../src/lib/workspace/backup-path";
 import { DEFAULT_WORKSPACE_SLUG } from "../src/lib/workspace/roles";
 import { syncLegacyWorkspaceDataBySlug } from "../src/lib/workspace/sync";
 
-const BACKUP_PATH = path.resolve(
-  __dirname,
-  "../../SPX TASK TRACKER/data/tracker-data.json",
-);
-
 function loadBackup(): TrackerBackup {
-  const raw = readFileSync(BACKUP_PATH, "utf8");
+  const raw = readFileSync(getTrackerBackupPath(path.resolve(__dirname, "..")), "utf8");
   const backup = JSON.parse(raw) as TrackerBackup;
 
   if (backup.app !== "company-task-tracker") {
@@ -29,7 +25,7 @@ function loadBackup(): TrackerBackup {
 async function main() {
   const backup = loadBackup();
   await syncLegacyWorkspaceDataBySlug(DEFAULT_WORKSPACE_SLUG, backup.data);
-  console.log(`Seeded workspace from ${BACKUP_PATH}`);
+  console.log(`Seeded workspace from ${getTrackerBackupPath(path.resolve(__dirname, ".."))}`);
   await seedAuthUsers();
 }
 

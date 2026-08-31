@@ -256,6 +256,8 @@ export type StaffMemberWhereInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberListRelationFilter
   ledProjects?: Prisma.ProjectListRelationFilter
   scheduleGuests?: Prisma.ScheduleEventGuestListRelationFilter
+  notificationsReceived?: Prisma.NotificationListRelationFilter
+  notificationsSent?: Prisma.NotificationListRelationFilter
 }
 
 export type StaffMemberOrderByWithRelationInput = {
@@ -276,6 +278,8 @@ export type StaffMemberOrderByWithRelationInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberOrderByRelationAggregateInput
   ledProjects?: Prisma.ProjectOrderByRelationAggregateInput
   scheduleGuests?: Prisma.ScheduleEventGuestOrderByRelationAggregateInput
+  notificationsReceived?: Prisma.NotificationOrderByRelationAggregateInput
+  notificationsSent?: Prisma.NotificationOrderByRelationAggregateInput
 }
 
 export type StaffMemberWhereUniqueInput = Prisma.AtLeast<{
@@ -300,6 +304,8 @@ export type StaffMemberWhereUniqueInput = Prisma.AtLeast<{
   orgTeamMembers?: Prisma.OrgTeamMemberListRelationFilter
   ledProjects?: Prisma.ProjectListRelationFilter
   scheduleGuests?: Prisma.ScheduleEventGuestListRelationFilter
+  notificationsReceived?: Prisma.NotificationListRelationFilter
+  notificationsSent?: Prisma.NotificationListRelationFilter
 }, "id" | "userId" | "workspaceId_displayName">
 
 export type StaffMemberOrderByWithAggregationInput = {
@@ -350,6 +356,8 @@ export type StaffMemberCreateInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateInput = {
@@ -368,6 +376,8 @@ export type StaffMemberUncheckedCreateInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUpdateInput = {
@@ -386,6 +396,8 @@ export type StaffMemberUpdateInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateInput = {
@@ -404,6 +416,8 @@ export type StaffMemberUncheckedUpdateInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateManyInput = {
@@ -555,18 +569,6 @@ export type EnumPermissionRoleFieldUpdateOperationsInput = {
   set?: $Enums.PermissionRole
 }
 
-export type IntFieldUpdateOperationsInput = {
-  set?: number
-  increment?: number
-  decrement?: number
-  multiply?: number
-  divide?: number
-}
-
-export type NullableStringFieldUpdateOperationsInput = {
-  set?: string | null
-}
-
 export type StaffMemberCreateNestedOneWithoutUserInput = {
   create?: Prisma.XOR<Prisma.StaffMemberCreateWithoutUserInput, Prisma.StaffMemberUncheckedCreateWithoutUserInput>
   connectOrCreate?: Prisma.StaffMemberCreateOrConnectWithoutUserInput
@@ -687,6 +689,36 @@ export type StaffMemberUpdateOneRequiredWithoutScheduleGuestsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.StaffMemberUpdateToOneWithWhereWithoutScheduleGuestsInput, Prisma.StaffMemberUpdateWithoutScheduleGuestsInput>, Prisma.StaffMemberUncheckedUpdateWithoutScheduleGuestsInput>
 }
 
+export type StaffMemberCreateNestedOneWithoutNotificationsReceivedInput = {
+  create?: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsReceivedInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsReceivedInput>
+  connectOrCreate?: Prisma.StaffMemberCreateOrConnectWithoutNotificationsReceivedInput
+  connect?: Prisma.StaffMemberWhereUniqueInput
+}
+
+export type StaffMemberCreateNestedOneWithoutNotificationsSentInput = {
+  create?: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsSentInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsSentInput>
+  connectOrCreate?: Prisma.StaffMemberCreateOrConnectWithoutNotificationsSentInput
+  connect?: Prisma.StaffMemberWhereUniqueInput
+}
+
+export type StaffMemberUpdateOneRequiredWithoutNotificationsReceivedNestedInput = {
+  create?: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsReceivedInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsReceivedInput>
+  connectOrCreate?: Prisma.StaffMemberCreateOrConnectWithoutNotificationsReceivedInput
+  upsert?: Prisma.StaffMemberUpsertWithoutNotificationsReceivedInput
+  connect?: Prisma.StaffMemberWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.StaffMemberUpdateToOneWithWhereWithoutNotificationsReceivedInput, Prisma.StaffMemberUpdateWithoutNotificationsReceivedInput>, Prisma.StaffMemberUncheckedUpdateWithoutNotificationsReceivedInput>
+}
+
+export type StaffMemberUpdateOneWithoutNotificationsSentNestedInput = {
+  create?: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsSentInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsSentInput>
+  connectOrCreate?: Prisma.StaffMemberCreateOrConnectWithoutNotificationsSentInput
+  upsert?: Prisma.StaffMemberUpsertWithoutNotificationsSentInput
+  disconnect?: Prisma.StaffMemberWhereInput | boolean
+  delete?: Prisma.StaffMemberWhereInput | boolean
+  connect?: Prisma.StaffMemberWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.StaffMemberUpdateToOneWithWhereWithoutNotificationsSentInput, Prisma.StaffMemberUpdateWithoutNotificationsSentInput>, Prisma.StaffMemberUncheckedUpdateWithoutNotificationsSentInput>
+}
+
 export type StaffMemberCreateWithoutWorkspaceInput = {
   id?: string
   displayName: string
@@ -702,6 +734,8 @@ export type StaffMemberCreateWithoutWorkspaceInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutWorkspaceInput = {
@@ -719,6 +753,8 @@ export type StaffMemberUncheckedCreateWithoutWorkspaceInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutWorkspaceInput = {
@@ -777,6 +813,8 @@ export type StaffMemberCreateWithoutUserInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutUserInput = {
@@ -794,6 +832,8 @@ export type StaffMemberUncheckedCreateWithoutUserInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutUserInput = {
@@ -827,6 +867,8 @@ export type StaffMemberUpdateWithoutUserInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutUserInput = {
@@ -844,6 +886,8 @@ export type StaffMemberUncheckedUpdateWithoutUserInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateWithoutLedProjectsInput = {
@@ -861,6 +905,8 @@ export type StaffMemberCreateWithoutLedProjectsInput = {
   projectMembers?: Prisma.ProjectMemberCreateNestedManyWithoutStaffMemberInput
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutLedProjectsInput = {
@@ -878,6 +924,8 @@ export type StaffMemberUncheckedCreateWithoutLedProjectsInput = {
   projectMembers?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutLedProjectsInput = {
@@ -911,6 +959,8 @@ export type StaffMemberUpdateWithoutLedProjectsInput = {
   projectMembers?: Prisma.ProjectMemberUpdateManyWithoutStaffMemberNestedInput
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutLedProjectsInput = {
@@ -928,6 +978,8 @@ export type StaffMemberUncheckedUpdateWithoutLedProjectsInput = {
   projectMembers?: Prisma.ProjectMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateWithoutProjectMembersInput = {
@@ -945,6 +997,8 @@ export type StaffMemberCreateWithoutProjectMembersInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutProjectMembersInput = {
@@ -962,6 +1016,8 @@ export type StaffMemberUncheckedCreateWithoutProjectMembersInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutProjectMembersInput = {
@@ -995,6 +1051,8 @@ export type StaffMemberUpdateWithoutProjectMembersInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutProjectMembersInput = {
@@ -1012,6 +1070,8 @@ export type StaffMemberUncheckedUpdateWithoutProjectMembersInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateWithoutOrgTeamMembersInput = {
@@ -1029,6 +1089,8 @@ export type StaffMemberCreateWithoutOrgTeamMembersInput = {
   projectMembers?: Prisma.ProjectMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutOrgTeamMembersInput = {
@@ -1046,6 +1108,8 @@ export type StaffMemberUncheckedCreateWithoutOrgTeamMembersInput = {
   projectMembers?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutOrgTeamMembersInput = {
@@ -1079,6 +1143,8 @@ export type StaffMemberUpdateWithoutOrgTeamMembersInput = {
   projectMembers?: Prisma.ProjectMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutOrgTeamMembersInput = {
@@ -1096,6 +1162,8 @@ export type StaffMemberUncheckedUpdateWithoutOrgTeamMembersInput = {
   projectMembers?: Prisma.ProjectMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateWithoutOwnedTasksInput = {
@@ -1113,6 +1181,8 @@ export type StaffMemberCreateWithoutOwnedTasksInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutOwnedTasksInput = {
@@ -1130,6 +1200,8 @@ export type StaffMemberUncheckedCreateWithoutOwnedTasksInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutOwnedTasksInput = {
@@ -1163,6 +1235,8 @@ export type StaffMemberUpdateWithoutOwnedTasksInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutOwnedTasksInput = {
@@ -1180,6 +1254,8 @@ export type StaffMemberUncheckedUpdateWithoutOwnedTasksInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateWithoutTaskUpdatesInput = {
@@ -1197,6 +1273,8 @@ export type StaffMemberCreateWithoutTaskUpdatesInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutTaskUpdatesInput = {
@@ -1214,6 +1292,8 @@ export type StaffMemberUncheckedCreateWithoutTaskUpdatesInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutTaskUpdatesInput = {
@@ -1247,6 +1327,8 @@ export type StaffMemberUpdateWithoutTaskUpdatesInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutTaskUpdatesInput = {
@@ -1264,6 +1346,8 @@ export type StaffMemberUncheckedUpdateWithoutTaskUpdatesInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberCreateWithoutScheduleGuestsInput = {
@@ -1281,6 +1365,8 @@ export type StaffMemberCreateWithoutScheduleGuestsInput = {
   projectMembers?: Prisma.ProjectMemberCreateNestedManyWithoutStaffMemberInput
   orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberUncheckedCreateWithoutScheduleGuestsInput = {
@@ -1298,6 +1384,8 @@ export type StaffMemberUncheckedCreateWithoutScheduleGuestsInput = {
   projectMembers?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
   ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
 }
 
 export type StaffMemberCreateOrConnectWithoutScheduleGuestsInput = {
@@ -1331,6 +1419,8 @@ export type StaffMemberUpdateWithoutScheduleGuestsInput = {
   projectMembers?: Prisma.ProjectMemberUpdateManyWithoutStaffMemberNestedInput
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutScheduleGuestsInput = {
@@ -1348,6 +1438,192 @@ export type StaffMemberUncheckedUpdateWithoutScheduleGuestsInput = {
   projectMembers?: Prisma.ProjectMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
+}
+
+export type StaffMemberCreateWithoutNotificationsReceivedInput = {
+  id?: string
+  displayName: string
+  firstName: string
+  lastName?: string
+  jobTitle?: string
+  permissionRole?: $Enums.PermissionRole
+  sortOrder?: number
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutStaffMembersInput
+  user?: Prisma.UserCreateNestedOneWithoutStaffMemberInput
+  ownedTasks?: Prisma.TaskOwnerCreateNestedManyWithoutStaffMemberInput
+  taskUpdates?: Prisma.TaskUpdateCreateNestedManyWithoutStaffMemberInput
+  projectMembers?: Prisma.ProjectMemberCreateNestedManyWithoutStaffMemberInput
+  orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
+  ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
+  scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsSent?: Prisma.NotificationCreateNestedManyWithoutActorInput
+}
+
+export type StaffMemberUncheckedCreateWithoutNotificationsReceivedInput = {
+  id?: string
+  workspaceId: string
+  userId?: string | null
+  displayName: string
+  firstName: string
+  lastName?: string
+  jobTitle?: string
+  permissionRole?: $Enums.PermissionRole
+  sortOrder?: number
+  ownedTasks?: Prisma.TaskOwnerUncheckedCreateNestedManyWithoutStaffMemberInput
+  taskUpdates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutStaffMemberInput
+  projectMembers?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutStaffMemberInput
+  orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
+  ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
+  scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsSent?: Prisma.NotificationUncheckedCreateNestedManyWithoutActorInput
+}
+
+export type StaffMemberCreateOrConnectWithoutNotificationsReceivedInput = {
+  where: Prisma.StaffMemberWhereUniqueInput
+  create: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsReceivedInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsReceivedInput>
+}
+
+export type StaffMemberCreateWithoutNotificationsSentInput = {
+  id?: string
+  displayName: string
+  firstName: string
+  lastName?: string
+  jobTitle?: string
+  permissionRole?: $Enums.PermissionRole
+  sortOrder?: number
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutStaffMembersInput
+  user?: Prisma.UserCreateNestedOneWithoutStaffMemberInput
+  ownedTasks?: Prisma.TaskOwnerCreateNestedManyWithoutStaffMemberInput
+  taskUpdates?: Prisma.TaskUpdateCreateNestedManyWithoutStaffMemberInput
+  projectMembers?: Prisma.ProjectMemberCreateNestedManyWithoutStaffMemberInput
+  orgTeamMembers?: Prisma.OrgTeamMemberCreateNestedManyWithoutStaffMemberInput
+  ledProjects?: Prisma.ProjectCreateNestedManyWithoutLeaderInput
+  scheduleGuests?: Prisma.ScheduleEventGuestCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationCreateNestedManyWithoutRecipientInput
+}
+
+export type StaffMemberUncheckedCreateWithoutNotificationsSentInput = {
+  id?: string
+  workspaceId: string
+  userId?: string | null
+  displayName: string
+  firstName: string
+  lastName?: string
+  jobTitle?: string
+  permissionRole?: $Enums.PermissionRole
+  sortOrder?: number
+  ownedTasks?: Prisma.TaskOwnerUncheckedCreateNestedManyWithoutStaffMemberInput
+  taskUpdates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutStaffMemberInput
+  projectMembers?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutStaffMemberInput
+  orgTeamMembers?: Prisma.OrgTeamMemberUncheckedCreateNestedManyWithoutStaffMemberInput
+  ledProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeaderInput
+  scheduleGuests?: Prisma.ScheduleEventGuestUncheckedCreateNestedManyWithoutStaffMemberInput
+  notificationsReceived?: Prisma.NotificationUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type StaffMemberCreateOrConnectWithoutNotificationsSentInput = {
+  where: Prisma.StaffMemberWhereUniqueInput
+  create: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsSentInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsSentInput>
+}
+
+export type StaffMemberUpsertWithoutNotificationsReceivedInput = {
+  update: Prisma.XOR<Prisma.StaffMemberUpdateWithoutNotificationsReceivedInput, Prisma.StaffMemberUncheckedUpdateWithoutNotificationsReceivedInput>
+  create: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsReceivedInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsReceivedInput>
+  where?: Prisma.StaffMemberWhereInput
+}
+
+export type StaffMemberUpdateToOneWithWhereWithoutNotificationsReceivedInput = {
+  where?: Prisma.StaffMemberWhereInput
+  data: Prisma.XOR<Prisma.StaffMemberUpdateWithoutNotificationsReceivedInput, Prisma.StaffMemberUncheckedUpdateWithoutNotificationsReceivedInput>
+}
+
+export type StaffMemberUpdateWithoutNotificationsReceivedInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  displayName?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.StringFieldUpdateOperationsInput | string
+  permissionRole?: Prisma.EnumPermissionRoleFieldUpdateOperationsInput | $Enums.PermissionRole
+  sortOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutStaffMembersNestedInput
+  user?: Prisma.UserUpdateOneWithoutStaffMemberNestedInput
+  ownedTasks?: Prisma.TaskOwnerUpdateManyWithoutStaffMemberNestedInput
+  taskUpdates?: Prisma.TaskUpdateUpdateManyWithoutStaffMemberNestedInput
+  projectMembers?: Prisma.ProjectMemberUpdateManyWithoutStaffMemberNestedInput
+  orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
+  ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
+  scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
+}
+
+export type StaffMemberUncheckedUpdateWithoutNotificationsReceivedInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  displayName?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.StringFieldUpdateOperationsInput | string
+  permissionRole?: Prisma.EnumPermissionRoleFieldUpdateOperationsInput | $Enums.PermissionRole
+  sortOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  ownedTasks?: Prisma.TaskOwnerUncheckedUpdateManyWithoutStaffMemberNestedInput
+  taskUpdates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutStaffMemberNestedInput
+  projectMembers?: Prisma.ProjectMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
+  orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
+  ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
+  scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
+}
+
+export type StaffMemberUpsertWithoutNotificationsSentInput = {
+  update: Prisma.XOR<Prisma.StaffMemberUpdateWithoutNotificationsSentInput, Prisma.StaffMemberUncheckedUpdateWithoutNotificationsSentInput>
+  create: Prisma.XOR<Prisma.StaffMemberCreateWithoutNotificationsSentInput, Prisma.StaffMemberUncheckedCreateWithoutNotificationsSentInput>
+  where?: Prisma.StaffMemberWhereInput
+}
+
+export type StaffMemberUpdateToOneWithWhereWithoutNotificationsSentInput = {
+  where?: Prisma.StaffMemberWhereInput
+  data: Prisma.XOR<Prisma.StaffMemberUpdateWithoutNotificationsSentInput, Prisma.StaffMemberUncheckedUpdateWithoutNotificationsSentInput>
+}
+
+export type StaffMemberUpdateWithoutNotificationsSentInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  displayName?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.StringFieldUpdateOperationsInput | string
+  permissionRole?: Prisma.EnumPermissionRoleFieldUpdateOperationsInput | $Enums.PermissionRole
+  sortOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutStaffMembersNestedInput
+  user?: Prisma.UserUpdateOneWithoutStaffMemberNestedInput
+  ownedTasks?: Prisma.TaskOwnerUpdateManyWithoutStaffMemberNestedInput
+  taskUpdates?: Prisma.TaskUpdateUpdateManyWithoutStaffMemberNestedInput
+  projectMembers?: Prisma.ProjectMemberUpdateManyWithoutStaffMemberNestedInput
+  orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
+  ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
+  scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+}
+
+export type StaffMemberUncheckedUpdateWithoutNotificationsSentInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  displayName?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.StringFieldUpdateOperationsInput | string
+  permissionRole?: Prisma.EnumPermissionRoleFieldUpdateOperationsInput | $Enums.PermissionRole
+  sortOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  ownedTasks?: Prisma.TaskOwnerUncheckedUpdateManyWithoutStaffMemberNestedInput
+  taskUpdates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutStaffMemberNestedInput
+  projectMembers?: Prisma.ProjectMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
+  orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
+  ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
+  scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
 }
 
 export type StaffMemberCreateManyWorkspaceInput = {
@@ -1376,6 +1652,8 @@ export type StaffMemberUpdateWithoutWorkspaceInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateWithoutWorkspaceInput = {
@@ -1393,6 +1671,8 @@ export type StaffMemberUncheckedUpdateWithoutWorkspaceInput = {
   orgTeamMembers?: Prisma.OrgTeamMemberUncheckedUpdateManyWithoutStaffMemberNestedInput
   ledProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeaderNestedInput
   scheduleGuests?: Prisma.ScheduleEventGuestUncheckedUpdateManyWithoutStaffMemberNestedInput
+  notificationsReceived?: Prisma.NotificationUncheckedUpdateManyWithoutRecipientNestedInput
+  notificationsSent?: Prisma.NotificationUncheckedUpdateManyWithoutActorNestedInput
 }
 
 export type StaffMemberUncheckedUpdateManyWithoutWorkspaceInput = {
@@ -1418,6 +1698,8 @@ export type StaffMemberCountOutputType = {
   orgTeamMembers: number
   ledProjects: number
   scheduleGuests: number
+  notificationsReceived: number
+  notificationsSent: number
 }
 
 export type StaffMemberCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1427,6 +1709,8 @@ export type StaffMemberCountOutputTypeSelect<ExtArgs extends runtime.Types.Exten
   orgTeamMembers?: boolean | StaffMemberCountOutputTypeCountOrgTeamMembersArgs
   ledProjects?: boolean | StaffMemberCountOutputTypeCountLedProjectsArgs
   scheduleGuests?: boolean | StaffMemberCountOutputTypeCountScheduleGuestsArgs
+  notificationsReceived?: boolean | StaffMemberCountOutputTypeCountNotificationsReceivedArgs
+  notificationsSent?: boolean | StaffMemberCountOutputTypeCountNotificationsSentArgs
 }
 
 /**
@@ -1481,6 +1765,20 @@ export type StaffMemberCountOutputTypeCountScheduleGuestsArgs<ExtArgs extends ru
   where?: Prisma.ScheduleEventGuestWhereInput
 }
 
+/**
+ * StaffMemberCountOutputType without action
+ */
+export type StaffMemberCountOutputTypeCountNotificationsReceivedArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.NotificationWhereInput
+}
+
+/**
+ * StaffMemberCountOutputType without action
+ */
+export type StaffMemberCountOutputTypeCountNotificationsSentArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.NotificationWhereInput
+}
+
 
 export type StaffMemberSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1500,6 +1798,8 @@ export type StaffMemberSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   orgTeamMembers?: boolean | Prisma.StaffMember$orgTeamMembersArgs<ExtArgs>
   ledProjects?: boolean | Prisma.StaffMember$ledProjectsArgs<ExtArgs>
   scheduleGuests?: boolean | Prisma.StaffMember$scheduleGuestsArgs<ExtArgs>
+  notificationsReceived?: boolean | Prisma.StaffMember$notificationsReceivedArgs<ExtArgs>
+  notificationsSent?: boolean | Prisma.StaffMember$notificationsSentArgs<ExtArgs>
   _count?: boolean | Prisma.StaffMemberCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["staffMember"]>
 
@@ -1553,6 +1853,8 @@ export type StaffMemberInclude<ExtArgs extends runtime.Types.Extensions.Internal
   orgTeamMembers?: boolean | Prisma.StaffMember$orgTeamMembersArgs<ExtArgs>
   ledProjects?: boolean | Prisma.StaffMember$ledProjectsArgs<ExtArgs>
   scheduleGuests?: boolean | Prisma.StaffMember$scheduleGuestsArgs<ExtArgs>
+  notificationsReceived?: boolean | Prisma.StaffMember$notificationsReceivedArgs<ExtArgs>
+  notificationsSent?: boolean | Prisma.StaffMember$notificationsSentArgs<ExtArgs>
   _count?: boolean | Prisma.StaffMemberCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type StaffMemberIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1575,6 +1877,8 @@ export type $StaffMemberPayload<ExtArgs extends runtime.Types.Extensions.Interna
     orgTeamMembers: Prisma.$OrgTeamMemberPayload<ExtArgs>[]
     ledProjects: Prisma.$ProjectPayload<ExtArgs>[]
     scheduleGuests: Prisma.$ScheduleEventGuestPayload<ExtArgs>[]
+    notificationsReceived: Prisma.$NotificationPayload<ExtArgs>[]
+    notificationsSent: Prisma.$NotificationPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1988,6 +2292,8 @@ export interface Prisma__StaffMemberClient<T, Null = never, ExtArgs extends runt
   orgTeamMembers<T extends Prisma.StaffMember$orgTeamMembersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StaffMember$orgTeamMembersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrgTeamMemberPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   ledProjects<T extends Prisma.StaffMember$ledProjectsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StaffMember$ledProjectsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   scheduleGuests<T extends Prisma.StaffMember$scheduleGuestsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StaffMember$scheduleGuestsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ScheduleEventGuestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  notificationsReceived<T extends Prisma.StaffMember$notificationsReceivedArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StaffMember$notificationsReceivedArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$NotificationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  notificationsSent<T extends Prisma.StaffMember$notificationsSentArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StaffMember$notificationsSentArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$NotificationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2587,6 +2893,54 @@ export type StaffMember$scheduleGuestsArgs<ExtArgs extends runtime.Types.Extensi
   take?: number
   skip?: number
   distinct?: Prisma.ScheduleEventGuestScalarFieldEnum | Prisma.ScheduleEventGuestScalarFieldEnum[]
+}
+
+/**
+ * StaffMember.notificationsReceived
+ */
+export type StaffMember$notificationsReceivedArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Notification
+   */
+  select?: Prisma.NotificationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Notification
+   */
+  omit?: Prisma.NotificationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.NotificationInclude<ExtArgs> | null
+  where?: Prisma.NotificationWhereInput
+  orderBy?: Prisma.NotificationOrderByWithRelationInput | Prisma.NotificationOrderByWithRelationInput[]
+  cursor?: Prisma.NotificationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.NotificationScalarFieldEnum | Prisma.NotificationScalarFieldEnum[]
+}
+
+/**
+ * StaffMember.notificationsSent
+ */
+export type StaffMember$notificationsSentArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Notification
+   */
+  select?: Prisma.NotificationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Notification
+   */
+  omit?: Prisma.NotificationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.NotificationInclude<ExtArgs> | null
+  where?: Prisma.NotificationWhereInput
+  orderBy?: Prisma.NotificationOrderByWithRelationInput | Prisma.NotificationOrderByWithRelationInput[]
+  cursor?: Prisma.NotificationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.NotificationScalarFieldEnum | Prisma.NotificationScalarFieldEnum[]
 }
 
 /**

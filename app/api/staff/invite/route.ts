@@ -14,7 +14,7 @@ import {
   sendInviteEmail,
 } from "@/src/lib/auth/mail";
 import { generateTempPassword, hashPassword } from "@/src/lib/auth/password";
-import { resolveAuthSession } from "@/src/lib/auth/session";
+import { requirePermission, requireSession } from "@/src/lib/api/guard";
 import { prisma } from "@/src/lib/prisma";
 import {
   DEFAULT_WORKSPACE_SLUG,
@@ -32,22 +32,13 @@ const inviteSchema = z.object({
   permissionRole: z.string().optional(),
 });
 
-function canInvite(role: string): boolean {
-  return role === "Super Admin" || role === "Admin";
-}
-
 export async function POST(request: Request) {
-  const { auth } = await resolveAuthSession();
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const sessionResult = await requireSession();
+  if ("error" in sessionResult) return sessionResult.error;
+  const { session } = sessionResult;
 
-  if (!canInvite(auth.staffMember.permissionRole)) {
-    return NextResponse.json(
-      { error: "Only Admins can invite team members." },
-      { status: 403 },
-    );
-  }
+  const allowed = await requirePermission(session.auth, "staff.create");
+  if ("error" in allowed) return allowed.error;
 
   let body: unknown;
   try {
@@ -187,7 +178,7 @@ export async function POST(request: Request) {
     email,
     acceptUrl,
     loginUrl,
-    adminName: auth.staffMember.displayName,
+    adminName: session.auth.staffMember.displayName,
     ttlHours,
   });
 

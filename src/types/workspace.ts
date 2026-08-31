@@ -27,7 +27,7 @@ export type LegacyTask = {
 };
 
 export type DeletedTask = LegacyTask & {
-  trashId: string;
+  trashId?: string;
   previousStatus: string;
   deletedAt: string;
 };
@@ -72,6 +72,12 @@ export type WorkspaceData = {
   orgTeamMembers: Record<string, string[]>;
   schedule: { events: ScheduleEvent[] };
   permissionMatrix: Record<PermissionRoleLabel, Record<string, boolean>>;
+  /** Project display name → database id (for incremental API calls). */
+  projectIds?: Record<string, string>;
+  /** Org team display name → database id. */
+  orgTeamIds?: Record<string, string>;
+  /** Staff display name → database id. */
+  staffIds?: Record<string, string>;
 };
 
 export type TrackerBackup = {

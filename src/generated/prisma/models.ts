@@ -9,6 +9,7 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/Workspace'
+export type * from './models/WorkspaceEvent'
 export type * from './models/StaffMember'
 export type * from './models/User'
 export type * from './models/RefreshToken'
@@ -24,4 +25,5 @@ export type * from './models/ArchivedTask'
 export type * from './models/ScheduleEvent'
 export type * from './models/ScheduleEventGuest'
 export type * from './models/PermissionRule'
+export type * from './models/Notification'
 export type * from './commonInputTypes'

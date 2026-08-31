@@ -52,6 +52,7 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   Workspace: 'Workspace',
+  WorkspaceEvent: 'WorkspaceEvent',
   StaffMember: 'StaffMember',
   User: 'User',
   RefreshToken: 'RefreshToken',
@@ -66,7 +67,8 @@ export const ModelName = {
   ArchivedTask: 'ArchivedTask',
   ScheduleEvent: 'ScheduleEvent',
   ScheduleEventGuest: 'ScheduleEventGuest',
-  PermissionRule: 'PermissionRule'
+  PermissionRule: 'PermissionRule',
+  Notification: 'Notification'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -89,11 +91,28 @@ export const WorkspaceScalarFieldEnum = {
   id: 'id',
   slug: 'slug',
   name: 'name',
+  revision: 'revision',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
+
+
+export const WorkspaceEventScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  revision: 'revision',
+  type: 'type',
+  resource: 'resource',
+  resourceId: 'resourceId',
+  payload: 'payload',
+  actorUserId: 'actorUserId',
+  actorClientId: 'actorClientId',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceEventScalarFieldEnum = (typeof WorkspaceEventScalarFieldEnum)[keyof typeof WorkspaceEventScalarFieldEnum]
 
 
 export const StaffMemberScalarFieldEnum = {
@@ -267,6 +286,23 @@ export const PermissionRuleScalarFieldEnum = {
 export type PermissionRuleScalarFieldEnum = (typeof PermissionRuleScalarFieldEnum)[keyof typeof PermissionRuleScalarFieldEnum]
 
 
+export const NotificationScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  recipientId: 'recipientId',
+  type: 'type',
+  title: 'title',
+  body: 'body',
+  resourceType: 'resourceType',
+  resourceId: 'resourceId',
+  actorStaffId: 'actorStaffId',
+  readAt: 'readAt',
+  createdAt: 'createdAt'
+} as const
+
+export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -290,14 +326,6 @@ export const QueryMode = {
 export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
 
 
-export const NullsOrder = {
-  first: 'first',
-  last: 'last'
-} as const
-
-export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
-
-
 export const JsonNullValueFilter = {
   DbNull: DbNull,
   JsonNull: JsonNull,
@@ -305,4 +333,12 @@ export const JsonNullValueFilter = {
 } as const
 
 export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
+
+
+export const NullsOrder = {
+  first: 'first',
+  last: 'last'
+} as const
+
+export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
 

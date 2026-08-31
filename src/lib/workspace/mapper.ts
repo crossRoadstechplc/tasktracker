@@ -130,12 +130,18 @@ export async function getLegacyWorkspaceData(
 ): Promise<WorkspaceData> {
   const workspace = await loadWorkspace(workspaceId);
   const { staff, staffProfiles, idToDisplayName } = buildStaffMaps(workspace.staffMembers);
+  const staffIds: Record<string, string> = {};
+  for (const member of workspace.staffMembers) {
+    staffIds[member.displayName] = member.id;
+  }
 
   const teams = workspace.projects.map((project) => project.name);
+  const projectIds: Record<string, string> = {};
   const teamMembers: Record<string, string[]> = {};
   const teamLeaders: Record<string, string> = {};
 
   for (const project of workspace.projects) {
+    projectIds[project.name] = project.id;
     teamMembers[project.name] = project.members
       .map((member) => member.staffMember.displayName)
       .filter((name) => staff.includes(name));
@@ -143,9 +149,11 @@ export async function getLegacyWorkspaceData(
   }
 
   const orgTeams = workspace.orgTeams.map((team) => team.name);
+  const orgTeamIds: Record<string, string> = {};
   const orgTeamMembers: Record<string, string[]> = {};
 
   for (const orgTeam of workspace.orgTeams) {
+    orgTeamIds[orgTeam.name] = orgTeam.id;
     orgTeamMembers[orgTeam.name] = orgTeam.members
       .map((member) => member.staffMember.displayName)
       .filter((name) => staff.includes(name));
@@ -215,6 +223,9 @@ export async function getLegacyWorkspaceData(
     orgTeamMembers,
     schedule: { events },
     permissionMatrix,
+    projectIds,
+    orgTeamIds,
+    staffIds,
   };
 }
 

@@ -2,15 +2,20 @@
 /** Ported from SPX TASK TRACKER/index.html — persistence wired to /api/workspace. */
 import type { AuthUserResponse } from "@/src/lib/auth/types";
 import type { WorkspaceData } from "@/src/types/workspace";
+import { createTrackerSync } from "@/src/tracker/tracker-sync";
+import { createSettingsSync } from "@/src/tracker/tracker-settings-sync";
+import { createNotificationCenter } from "@/src/tracker/notification-center";
 
 export type TrackerInitOptions = {
   preloadData?: WorkspaceData;
   authUser?: AuthUserResponse;
+  workspaceRevision?: number;
 };
 
 export function initTrackerApp(options: TrackerInitOptions = {}) {
   const preloadData = options.preloadData;
   const authUser = options.authUser ?? null;
+  const initialWorkspaceRevision = options.workspaceRevision ?? 0;
 
     const statuses = ["To Do", "In Progress", "Done"];
       const STORAGE_KEY = "company-task-tracker-v1";
@@ -25,11 +30,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const ORG_TEAM_MEMBERS_STORAGE_KEY = "company-task-tracker-org-team-members-v1";
       const SCHEDULE_STORAGE_KEY = "company-task-tracker-schedule-v1";
       const PERMISSION_MATRIX_STORAGE_KEY = "company-task-tracker-permission-matrix-v1";
-      // Local to this browser only â€” a stand-in for real identity until Google
-      // sign-in is wired up. Deliberately NOT in BACKUP_STORAGE_KEYS: it must
-      // never travel through export/import or the shared data-folder sync, or
-      // one teammate's save would silently switch who another teammate appears
-      // to be signed in as.
+      // Signed-in identity comes from the auth session. Never fall back to
+      // another teammate stored in this browser — that would let a missing
+      // session impersonate the first staff member (often Super Admin).
       const CURRENT_USER_STORAGE_KEY = "company-task-tracker-current-user-v1";
       const BACKUP_VERSION = 1;
       const BACKUP_STORAGE_KEYS = {
@@ -63,7 +66,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(data.schedule ?? { events: [] }));
         localStorage.setItem(PERMISSION_MATRIX_STORAGE_KEY, JSON.stringify(data.permissionMatrix ?? {}));
         localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        if (data.projectIds) projectIds = { ...data.projectIds };
+        if (data.orgTeamIds) orgTeamIds = { ...data.orgTeamIds };
+        if (data.staffIds) staffIds = { ...data.staffIds };
       }
+
+      let projectIds = { ...(preloadData?.projectIds ?? {}) };
+      let orgTeamIds = { ...(preloadData?.orgTeamIds ?? {}) };
+      let staffIds = { ...(preloadData?.staffIds ?? {}) };
 
       applyPreloadedWorkspace(preloadData);
 
@@ -160,10 +170,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         isRecord(value) && Object.values(value).every(item => typeof item === "string");
 
       // ---------------------------------------------------------------------
-      // Roles & permissions. This is a client-side UI-affordance layer only â€”
-      // it hides/disables actions based on a locally-stored "signed in as"
-      // pick, not real authentication. See getCurrentUser() below for the
-      // seam where real sign-in will eventually plug in.
+      // Roles & permissions. The UI hides or disables actions based on the
+      // signed-in user's role. Server-side routes enforce the same matrix.
       // ---------------------------------------------------------------------
       const PERMISSION_ROLES = ["Super Admin", "Admin", "Lead", "Senior Staff", "Junior Staff"];
       const DEFAULT_STAFF_PERMISSION_ROLE = "Junior Staff";
@@ -203,7 +211,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       ];
 
       // Written out explicitly (not derived) so it stays easy to eyeball and
-      // hand-edit. Super Admin is always fully granted â€” see can() below,
+      // hand-edit. Super Admin is always fully granted — see can() below,
       // which enforces this in code regardless of what's stored here.
       const DEFAULT_PERMISSION_MATRIX = {
         "Super Admin": Object.fromEntries(PERMISSION_ACTIONS.map(a => [a.id, true])),
@@ -291,8 +299,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       let deletedTasks = readStoredJson(TRASH_STORAGE_KEY, [], isRecordArray);
       deletedTasks = deletedTasks.map(task => taskWithOwners({
-        ...task,
-        trashId: task.trashId || crypto.randomUUID()
+        ...task
       }, task.owners || task.owner));
 
       let archivedTasks = readStoredJson(ARCHIVED_STORAGE_KEY, [], isRecordArray);
@@ -342,10 +349,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const isFirstPermissionsRun = permissionMatrix === null;
       if (isFirstPermissionsRun) permissionMatrix = structuredClone(DEFAULT_PERMISSION_MATRIX);
 
+      PERMISSION_ROLES.forEach(role => {
+        if (!permissionMatrix[role]) permissionMatrix[role] = {};
+        PERMISSION_ACTIONS.forEach(action => {
+          if (typeof permissionMatrix[role][action.id] !== "boolean") {
+            permissionMatrix[role][action.id] = Boolean(DEFAULT_PERMISSION_MATRIX[role]?.[action.id]);
+          }
+        });
+      });
+
       // Backfill permissionRole on profiles that predate this feature (or have
       // a stale/invalid value), and make sure at least one Super Admin exists
       // so nobody gets locked out of Settings. This check is deliberately NOT
-      // scoped to isFirstPermissionsRun â€” this local-folder-sync app can
+      // scoped to isFirstPermissionsRun — this local-folder-sync app can
       // reload from an on-disk backup that predates this feature (see
       // initializeFolderPersistence()/replaceLocalStorageFromBackup() below),
       // which would otherwise make isFirstPermissionsRun read false on the
@@ -363,28 +379,27 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       localStorage.setItem(STAFF_PROFILES_STORAGE_KEY, JSON.stringify(staffProfiles));
 
       // =====================================================================
-      // AUTH SEAM â€” everything above this comment is placeholder identity: a
-      // "Signed in as" pick, stored in this browser's localStorage only.
-      // When real "Sign in with Google" auth is wired up, replace ONLY the
-      // body of getCurrentUser() with a lookup from the authenticated Google
-      // identity, mapped to a Team Member record. Nothing else in the
-      // permission system (can(), applyPermissionGating(), the Settings
-      // screen, or any data-permission attribute in the markup) should need
-      // to change.
+      // AUTH — identity comes from the signed-in session (authUser).
+      // Permission checks (can(), applyPermissionGating(), Settings) still
+      // use the staff profile + permission matrix. Server-side saves also
+      // re-check these actions so a client cannot escalate privileges.
       // =====================================================================
-      let currentUserName = authUser?.staffMember.displayName || localStorage.getItem(CURRENT_USER_STORAGE_KEY) || "";
-      if (!staff.includes(currentUserName)) currentUserName = staff[0] || "";
+      let currentUserName = authUser?.staffMember.displayName || "";
 
       function getCurrentUser() {
         if (authUser?.staffMember) {
           const member = authUser.staffMember;
           const profile = staffProfiles[member.displayName];
+          const permissionRole =
+            profile?.permissionRole && PERMISSION_ROLES.includes(profile.permissionRole)
+              ? profile.permissionRole
+              : member.permissionRole;
           return {
             name: member.displayName,
             firstName: member.firstName,
             lastName: member.lastName,
             role: profile?.role ?? member.jobTitle,
-            permissionRole: member.permissionRole,
+            permissionRole,
           };
         }
 
@@ -401,13 +416,30 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function canAccessSettings() {
-        return ["Super Admin", "Admin"].includes(getCurrentUserRole());
+        return can("settings.editPermissions");
+      }
+
+      function refreshPermissionsUi(options = {}) {
+        const skipSettings = options.skipSettings === true;
+        applyPermissionGating();
+        updateSidebarBrandMark();
+        render();
+        renderTrash();
+        renderStaffManager();
+        renderOrgTeamManager();
+        renderTeamManager();
+        if (!skipSettings && settingsView.classList.contains("active")) {
+          renderSettingsView();
+        }
+        if (scheduleView.classList.contains("active")) {
+          renderScheduleView({ preserveScroll: true });
+        }
       }
 
       function can(actionId) {
         const role = getCurrentUserRole();
-        if (role === "Super Admin") return true; // hard safeguard, ignores the stored matrix
-        return Boolean(permissionMatrix[role] && permissionMatrix[role][actionId]);
+        if (role === "Super Admin") return true;
+        return Boolean(permissionMatrix[role]?.[actionId]);
       }
       // =====================================================================
 
@@ -537,6 +569,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const settingsView = document.getElementById("settingsView");
       const permissionMatrixWrap = document.getElementById("permissionMatrixWrap");
       const resetPermissionsBtn = document.getElementById("resetPermissionsBtn");
+      const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+      const permissionSaveStatus = document.getElementById("permissionSaveStatus");
       const scheduleView = document.getElementById("scheduleView");
       const scheduleNavBtn = document.getElementById("scheduleNavBtn");
       const scheduleTodayBtn = document.getElementById("scheduleTodayBtn");
@@ -638,7 +672,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             orgTeams,
             orgTeamMembers,
             schedule,
-            permissionMatrix
+            permissionMatrix,
+            projectIds,
+            orgTeamIds,
+            staffIds,
           }
         };
       }
@@ -682,6 +719,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       let folderSyncPending = false;
       let folderSyncTimer = null;
       let folderSyncQueue = Promise.resolve();
+      let trackerSync;
+      let settingsSync;
+      let permissionMatrixDirty = false;
+      let permissionSaveInProgress = false;
 
       function usesLocalFolderServer() {
         return typeof window !== "undefined";
@@ -842,19 +883,21 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function save() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-        scheduleFolderSync();
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        trackerSync.scheduleTaskSync();
       }
 
       function saveTrash() {
         localStorage.setItem(TRASH_STORAGE_KEY, JSON.stringify(deletedTasks));
         updateTrashCount();
-        scheduleFolderSync();
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        trackerSync.scheduleTrashSync();
       }
 
       function saveArchivedTasks() {
         localStorage.setItem(ARCHIVED_STORAGE_KEY, JSON.stringify(archivedTasks));
         updateArchivedCount();
-        scheduleFolderSync();
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
       }
 
       function updateTrashCount() {
@@ -914,12 +957,93 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           checkbox.addEventListener("change", () => {
             const { role, action } = checkbox.dataset;
             permissionMatrix[role][action] = checkbox.checked;
-            savePermissionMatrix();
-            applyPermissionGating();
+            markPermissionMatrixDirty();
+            refreshPermissionsUi({ skipSettings: true });
           });
         });
 
         resetPermissionsBtn.hidden = !can("settings.editPermissions");
+        savePermissionsBtn.hidden = !can("settings.editPermissions");
+        updatePermissionSaveUi();
+      }
+
+      function markPermissionMatrixDirty() {
+        localStorage.setItem(PERMISSION_MATRIX_STORAGE_KEY, JSON.stringify(permissionMatrix));
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        permissionMatrixDirty = true;
+        updatePermissionSaveUi();
+      }
+
+      function updatePermissionSaveUi() {
+        if (!savePermissionsBtn || !permissionSaveStatus) return;
+
+        const canEdit = can("settings.editPermissions");
+        savePermissionsBtn.hidden = !canEdit;
+        resetPermissionsBtn.hidden = !canEdit;
+        savePermissionsBtn.disabled = !canEdit || !permissionMatrixDirty || permissionSaveInProgress;
+        savePermissionsBtn.textContent = permissionSaveInProgress ? "Saving..." : "Save Permissions";
+
+        permissionSaveStatus.textContent = permissionMatrixDirty
+          ? "You have unsaved permission changes."
+          : permissionSaveInProgress
+            ? "Saving permissions..."
+            : "";
+        permissionSaveStatus.classList.toggle("visible", permissionMatrixDirty);
+        permissionSaveStatus.classList.toggle("saved", !permissionMatrixDirty && !permissionSaveInProgress && permissionSaveStatus.dataset.lastSaved === "true");
+      }
+
+      async function persistPermissionMatrix() {
+        if (!can("settings.editPermissions") || permissionSaveInProgress) return false;
+
+        permissionSaveInProgress = true;
+        updatePermissionSaveUi();
+
+        try {
+          const response = await fetch("/api/permissions", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ permissionMatrix }),
+          });
+
+          if (response.status === 401) {
+            window.location.replace("/login");
+            return false;
+          }
+
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || `Save failed (${response.status}).`);
+          }
+
+          localStorage.setItem(PERMISSION_MATRIX_STORAGE_KEY, JSON.stringify(permissionMatrix));
+          localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+          permissionMatrixDirty = false;
+          if (permissionSaveStatus) {
+            permissionSaveStatus.dataset.lastSaved = "true";
+            permissionSaveStatus.textContent = "Permissions saved.";
+            permissionSaveStatus.classList.remove("visible");
+            permissionSaveStatus.classList.add("saved");
+          }
+          setBackupStatus("Permissions saved.");
+          updatePermissionSaveUi();
+          refreshPermissionsUi();
+          return true;
+        } catch (error) {
+          console.error("Could not save permissions.", error);
+          const message = error instanceof Error ? error.message : "Could not save permissions.";
+          if (permissionSaveStatus) {
+            permissionSaveStatus.textContent = message;
+            permissionSaveStatus.classList.add("visible");
+            permissionSaveStatus.classList.remove("saved");
+          }
+          setBackupStatus(message, true);
+          updatePermissionSaveUi();
+          return false;
+        } finally {
+          permissionSaveInProgress = false;
+          updatePermissionSaveUi();
+        }
       }
 
       function renderTrash() {
@@ -963,6 +1087,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             restoreBtn.dataset.permission = "trash.restore";
 
             restoreBtn.addEventListener("click", () => {
+              if (!can("trash.restore")) return;
               const { trashId, deletedAt, previousStatus, ...taskData } = task;
               const restored = {
                 ...taskData,
@@ -986,11 +1111,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               }
 
               tasks.push(restored);
-              deletedTasks = deletedTasks.filter(t => t.trashId !== trashId);
-              save();
-              saveTrash();
+              deletedTasks = deletedTasks.filter(t => t.id !== task.id);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+              localStorage.setItem(TRASH_STORAGE_KEY, JSON.stringify(deletedTasks));
+              updateTrashCount();
               renderTrash();
               render();
+              if (trashId) {
+                void trackerSync.syncTrashRestore(trashId);
+              }
             });
 
             actions.appendChild(restoreBtn);
@@ -1046,27 +1175,20 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function saveStaffProfiles() {
         localStorage.setItem(STAFF_PROFILES_STORAGE_KEY, JSON.stringify(staffProfiles));
-        scheduleFolderSync();
-      }
-
-      function savePermissionMatrix() {
-        localStorage.setItem(PERMISSION_MATRIX_STORAGE_KEY, JSON.stringify(permissionMatrix));
-        scheduleFolderSync();
       }
 
       function saveOrgTeams() {
         localStorage.setItem(ORG_TEAMS_STORAGE_KEY, JSON.stringify(orgTeams));
-        scheduleFolderSync();
       }
 
       function saveOrgTeamMembers() {
         localStorage.setItem(ORG_TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(orgTeamMembers));
-        scheduleFolderSync();
       }
 
       function saveSchedule() {
         localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
-        scheduleFolderSync();
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        trackerSync.scheduleScheduleSync();
       }
 
       function orgTeamsForStaff(name) {
@@ -1077,7 +1199,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       function staffTypeLabel(name) {
         const [first, ...rest] = orgTeamsForStaff(name);
         if (!first) return name;
-        return rest.length ? `${name} Â· ${first} +${rest.length}` : `${name} Â· ${first}`;
+        return rest.length ? `${name} · ${first} +${rest.length}` : `${name} · ${first}`;
       }
 
       function staffMetaLabel(name) {
@@ -1086,7 +1208,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         return [
           profile.role || "No role set",
           memberships.length ? memberships.join(", ") : "No teams"
-        ].join(" Â· ");
+        ].join(" · ");
       }
 
       function staffFirstName(name) {
@@ -1199,6 +1321,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             input.className = className;
             input.value = value || "";
             input.autocomplete = "off";
+            input.dataset.permission = "staff.edit";
+            input.dataset.permissionMode = "disable";
 
             field.appendChild(label);
             field.appendChild(input);
@@ -1215,7 +1339,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
             const select = document.createElement("select");
             select.className = "staff-profile-permission-role";
-            select.disabled = !can("staff.assignRole");
+            select.dataset.permission = "staff.assignRole";
+            select.dataset.permissionMode = "disable";
             PERMISSION_ROLES.forEach(role => {
               const option = document.createElement("option");
               option.value = role;
@@ -1244,14 +1369,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           profilePanel.appendChild(profileGrid);
 
           configureBtn.addEventListener("click", () => {
-            if (isPendingInvite) return;
+            if (isPendingInvite || !can("staff.edit")) return;
             profilePanel.hidden = false;
             configureBtn.hidden = true;
             saveBtn.hidden = false;
             requestAnimationFrame(() => firstNameField.input.focus());
           });
 
-          saveBtn.addEventListener("click", () => {
+          saveBtn.addEventListener("click", async () => {
+            if (!can("staff.edit")) return;
             const firstName = firstNameField.input.value.trim();
             const lastName = lastNameField.input.value.trim();
             const role = roleField.input.value.trim();
@@ -1282,6 +1408,35 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               firstNameField.input.focus();
               return;
             }
+
+            const staffId = staffIds[name];
+            if (!staffId) {
+              window.alert("Could not save — team member id missing. Refresh and try again.");
+              return;
+            }
+
+            saveBtn.disabled = true;
+            try {
+              await settingsSync.updateStaffProfile(staffId, {
+                firstName,
+                lastName,
+                jobTitle: role,
+                displayName: newName,
+              });
+              if (nextPermissionRole !== profile.permissionRole) {
+                if (!can("staff.assignRole")) {
+                  window.alert("You do not have permission to change permission roles.");
+                  return;
+                }
+                await settingsSync.updateStaffRole(staffId, nextPermissionRole);
+              }
+            } catch (error) {
+              console.error("Staff save failed.", error);
+              saveBtn.disabled = false;
+              window.alert(error instanceof Error ? error.message : "Could not save team member.");
+              return;
+            }
+            saveBtn.disabled = false;
 
             if (newName !== name) {
               staff = staff.map(memberName => memberName === name ? newName : memberName);
@@ -1321,6 +1476,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                 return taskWithOwners(task, owners);
               });
 
+              settingsSync.renameStaffId(name, newName);
               delete staffProfiles[name];
             }
 
@@ -1331,14 +1487,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               permissionRole: nextPermissionRole
             };
 
-            saveStaff();
             saveStaffProfiles();
             saveTeamMembers();
             saveTeamLeaders();
             saveOrgTeamMembers();
             saveSchedule();
             save();
-            saveTrash();
 
             if (currentStaffFilter === name) {
               currentStaffFilter = newName;
@@ -1377,12 +1531,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           let resetTimer = null;
 
           removeBtn.addEventListener("click", async () => {
+            if (!can("staff.delete")) return;
             const assignedCount = tasks.filter(t => taskOwners(t).includes(name)).length;
 
             if (!removeArmed) {
               removeArmed = true;
               removeBtn.textContent = assignedCount
-                ? `Confirm Â· unassign ${assignedCount}`
+                ? `Confirm · unassign ${assignedCount}`
                 : "Confirm";
 
               resetTimer = setTimeout(() => {
@@ -1398,19 +1553,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             removeBtn.textContent = "Removing…";
 
             try {
-              const response = await fetch("/api/staff", {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({
-                  displayName: name,
-                  email: profile.email || undefined
-                })
-              });
-              const payload = await response.json().catch(() => null);
-              if (!response.ok) {
-                throw new Error(payload?.error || "Could not remove team member.");
+              const staffId = staffIds[name];
+              if (!staffId) {
+                throw new Error("Team member id not found. Refresh and try again.");
               }
+              await settingsSync.deleteStaffMember(staffId);
             } catch (error) {
               console.error("Remove staff failed.", error);
               removeBtn.disabled = false;
@@ -1428,6 +1575,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
             staff = staff.filter(memberName => memberName !== name);
             delete staffProfiles[name];
+            settingsSync.removeStaffId(name);
 
             Object.keys(orgTeamMembers).forEach(orgTeam => {
               orgTeamMembers[orgTeam] = (orgTeamMembers[orgTeam] || []).filter(member => member !== name);
@@ -1446,7 +1594,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               guests: (event.guests || []).filter(guest => guest !== name)
             }));
 
-            saveStaff();
             saveStaffProfiles();
             saveTeamMembers();
             saveTeamLeaders();
@@ -1634,6 +1781,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           const member = payload.staffMember;
           const displayName = member?.displayName || name;
+          if (member?.id) {
+            settingsSync.registerStaffId(displayName, member.id);
+          }
           staff.push(displayName);
           staffProfiles[displayName] = {
             firstName: member?.firstName || firstName,
@@ -1644,7 +1794,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             inviteStatus: "pending"
           };
 
-          saveStaff();
           saveStaffProfiles();
 
           newStaffFirstName.value = "";
@@ -1795,12 +1944,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function saveTeamMembers() {
         localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(teamMembers));
-        scheduleFolderSync();
       }
 
       function saveTeamLeaders() {
         localStorage.setItem(TEAM_LEADERS_STORAGE_KEY, JSON.stringify(teamLeaders));
-        scheduleFolderSync();
       }
 
       function membersForTeam(team) {
@@ -1840,7 +1987,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         return `
           <summary>
             <span class="owner-checklist-label">${ownerChecklistLabelHtml(selected, visibleNames.length)}</span>
-            <span class="owner-checklist-chevron" aria-hidden="true">âŒ„</span>
+            <span class="owner-checklist-chevron" aria-hidden="true">▾</span>
           </summary>
           <div class="owner-checklist-menu">
             ${visibleNames.length ? `
@@ -1949,6 +2096,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       function fromLocalDateTimeValue(value) {
         if (!value) return new Date();
         if (value.length === 10) return parseDateKey(value);
+        if (value.includes("Z") || /\.\d{3}Z?$/.test(value)) {
+          const parsed = new Date(value);
+          if (!Number.isNaN(parsed.getTime())) return parsed;
+        }
         const [datePart, timePart = "00:00"] = value.split("T");
         const [y, m, d] = datePart.split("-").map(Number);
         const [hh, mm] = timePart.split(":").map(Number);
@@ -1974,12 +2125,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         const startMonth = weekStart.toLocaleString("en-US", { month: "long" });
         const endMonth = weekEnd.toLocaleString("en-US", { month: "long" });
         if (weekStart.getFullYear() !== weekEnd.getFullYear()) {
-          return `${startMonth} ${weekStart.getDate()}, ${weekStart.getFullYear()} â€“ ${endMonth} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
+          return `${startMonth} ${weekStart.getDate()}, ${weekStart.getFullYear()} – ${endMonth} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
         }
         if (weekStart.getMonth() !== weekEnd.getMonth()) {
-          return `${startMonth} ${weekStart.getDate()} â€“ ${endMonth} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
+          return `${startMonth} ${weekStart.getDate()} – ${endMonth} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
         }
-        return `${startMonth} ${weekStart.getDate()} â€“ ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
+        return `${startMonth} ${weekStart.getDate()} – ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
       }
 
       function ensureScheduleWeek() {
@@ -2099,7 +2250,31 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         scheduleEventAllDay.checked = Boolean(eventData.allDay);
         scheduleEventLocation.value = eventData.location || "";
         scheduleEventDescription.value = eventData.description || "";
+
+        const canSave = isNew ? can("schedule.create") : can("schedule.edit");
+        scheduleEventSaveBtn.dataset.permission = isNew ? "schedule.create" : "schedule.edit";
+        scheduleEventSaveBtn.hidden = !canSave;
         scheduleEventDeleteBtn.hidden = isNew || !can("schedule.delete");
+        scheduleEventSaveBtn.dataset.nonPermissionDisabled = canSave ? "false" : "true";
+        scheduleEventSaveBtn.disabled = !canSave;
+
+        const scheduleFields = [
+          scheduleEventTitle,
+          scheduleEventAllDay,
+          scheduleEventDate,
+          scheduleEventStartTime,
+          scheduleEventEndTime,
+          scheduleEventLocation,
+          scheduleEventProject,
+          scheduleEventDescription,
+          scheduleGuestSelect,
+        ];
+        scheduleFields.forEach(field => {
+          if (field) field.disabled = !canSave;
+        });
+        scheduleColorRow.querySelectorAll("button").forEach(btn => {
+          btn.disabled = !canSave;
+        });
 
         const start = eventStartDate(eventData);
         let end = eventEndDate(eventData);
@@ -2109,6 +2284,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         scheduleEventProject.value = teams.includes(eventData.project) ? eventData.project : "";
         renderScheduleGuestDropdown();
         renderScheduleColorSwatches();
+        applyPermissionGating(scheduleModalBackdrop);
         scheduleModalBackdrop.hidden = false;
         scheduleEventTitle.focus();
       }
@@ -2156,7 +2332,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           const removeBtn = document.createElement("button");
           removeBtn.type = "button";
           removeBtn.setAttribute("aria-label", `Remove ${name}`);
-          removeBtn.textContent = "Ã—";
+          removeBtn.textContent = "×";
           removeBtn.addEventListener("click", () => {
             scheduleSelectedGuests = scheduleSelectedGuests.filter(guest => guest !== name);
             renderScheduleGuestDropdown();
@@ -2225,6 +2401,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         saveSchedule();
         closeScheduleModal();
         renderScheduleView();
+        void trackerSync.syncScheduleEvent(payload.id);
       }
 
       function deleteScheduleModalEvent() {
@@ -2233,10 +2410,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           return;
         }
         if (!can("schedule.delete")) return;
-        schedule.events = schedule.events.filter(event => event.id !== scheduleEditingEventId);
+        const deletedId = scheduleEditingEventId;
+        schedule.events = schedule.events.filter(event => event.id !== deletedId);
         saveSchedule();
         closeScheduleModal();
         renderScheduleView();
+        void trackerSync.syncScheduleDelete(deletedId);
       }
 
       function createDraftEvent(start, end, allDay = false) {
@@ -2432,7 +2611,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             block.style.background = event.color || SCHEDULE_COLORS[0];
             block.innerHTML = `
               <span>${escapeHtml(event.title || "(No title)")}</span>
-              <span class="schedule-event-time">${escapeHtml(formatEventTime(start))} â€“ ${escapeHtml(formatEventTime(end))}</span>
+              <span class="schedule-event-time">${escapeHtml(formatEventTime(start))} – ${escapeHtml(formatEventTime(end))}</span>
               <span class="schedule-resize-handle" data-resize="1"></span>
             `;
 
@@ -2547,6 +2726,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               if (moved) {
                 saveSchedule();
                 renderScheduleView({ preserveScroll: true });
+                void trackerSync.syncScheduleEvent(event.id);
               } else if (mode === "move") {
                 block.style.left = originalLeft;
                 block.style.width = originalWidth;
@@ -2722,7 +2902,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           const membersTitle = document.createElement("div");
           membersTitle.className = "team-members-title";
-          membersTitle.textContent = `Team members Â· ${orgTeam}`;
+          membersTitle.textContent = `Team members · ${orgTeam}`;
           membersPanel.appendChild(membersTitle);
 
           const memberOptions = document.createElement("div");
@@ -2752,6 +2932,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               if (otherTeams.length) suffixParts.push(`also in ${otherTeams.join(", ")}`);
 
               checkbox.addEventListener("change", () => {
+                if (!can("teams.manageMembers")) {
+                  checkbox.checked = !checkbox.checked;
+                  return;
+                }
                 if (!orgTeamMembers[orgTeam]) orgTeamMembers[orgTeam] = [];
 
                 if (checkbox.checked) {
@@ -2764,6 +2948,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                 }
 
                 saveOrgTeamMembers();
+                settingsSync.scheduleOrgTeamMembersSync(orgTeam);
                 memberCell.textContent = String((orgTeamMembers[orgTeam] || []).length);
                 render();
               });
@@ -2771,7 +2956,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               label.appendChild(checkbox);
               label.appendChild(
                 document.createTextNode(
-                  suffixParts.length ? `${staffName} Â· ${suffixParts.join(" Â· ")}` : staffName
+                  suffixParts.length ? `${staffName} · ${suffixParts.join(" · ")}` : staffName
                 )
               );
               memberOptions.appendChild(label);
@@ -2781,12 +2966,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           membersPanel.appendChild(memberOptions);
 
           configureBtn.addEventListener("click", () => {
+            if (!can("teams.manageMembers")) return;
             membersPanel.hidden = false;
             configureBtn.hidden = true;
             saveBtn.hidden = false;
           });
 
-          saveBtn.addEventListener("click", () => {
+          saveBtn.addEventListener("click", async () => {
             const newName = input.value.trim();
 
             if (!newName) {
@@ -2804,6 +2990,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             if (newName !== orgTeam) {
+              if (!can("teams.rename")) return;
+              saveBtn.disabled = true;
+              try {
+                await settingsSync.renameOrgTeam(orgTeam, newName);
+              } catch (error) {
+                console.error("Rename team failed.", error);
+                saveBtn.disabled = false;
+                input.value = orgTeam;
+                window.alert(error instanceof Error ? error.message : "Could not rename team.");
+                return;
+              }
+              saveBtn.disabled = false;
+
               orgTeams = orgTeams.map(teamName => teamName === orgTeam ? newName : teamName);
               orgTeamMembers[newName] = [...(orgTeamMembers[orgTeam] || [])];
               delete orgTeamMembers[orgTeam];
@@ -2845,7 +3044,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           let removeArmed = false;
           let removeResetTimer = null;
 
-          removeBtn.addEventListener("click", () => {
+          removeBtn.addEventListener("click", async () => {
+            if (!can("teams.delete")) return;
             if (!removeArmed) {
               removeArmed = true;
               removeBtn.textContent = "Confirm";
@@ -2857,6 +3057,18 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             if (removeResetTimer) clearTimeout(removeResetTimer);
+
+            removeBtn.disabled = true;
+            try {
+              await settingsSync.deleteOrgTeam(orgTeam);
+            } catch (error) {
+              console.error("Delete team failed.", error);
+              removeBtn.disabled = false;
+              removeArmed = false;
+              removeBtn.textContent = "Remove";
+              window.alert(error instanceof Error ? error.message : "Could not remove team.");
+              return;
+            }
 
             orgTeams = orgTeams.filter(teamName => teamName !== orgTeam);
             delete orgTeamMembers[orgTeam];
@@ -2887,6 +3099,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             onReorder: nextList => {
               orgTeams = nextList;
               saveOrgTeams();
+              scheduleFolderSync();
               renderOrgTeamManager();
             }
           });
@@ -2929,27 +3142,41 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           showFormFeedback(
             [newOrgTeamName],
             orgTeamFormFeedback,
-            `A team named â€œ${name}â€ already exists.`
+            `A team named "${name}" already exists.`
           );
           return;
         }
 
         clearFormFeedback([newOrgTeamName], orgTeamFormFeedback);
-        orgTeams.push(name);
-        orgTeamMembers[name] = [];
+        const addBtn = document.getElementById("addOrgTeamBtn");
+        if (addBtn) addBtn.disabled = true;
 
-        saveOrgTeams();
-        saveOrgTeamMembers();
-        populateOrgTeamFilter();
-
-        newOrgTeamName.value = "";
-        renderOrgTeamManager();
-        newOrgTeamName.focus();
+        void settingsSync.createOrgTeam(name)
+          .then(body => {
+            orgTeams.push(body.name);
+            orgTeamMembers[body.name] = [];
+            saveOrgTeams();
+            saveOrgTeamMembers();
+            populateOrgTeamFilter();
+            newOrgTeamName.value = "";
+            renderOrgTeamManager();
+            newOrgTeamName.focus();
+          })
+          .catch(error => {
+            console.error("Create team failed.", error);
+            showFormFeedback(
+              [newOrgTeamName],
+              orgTeamFormFeedback,
+              error instanceof Error ? error.message : "Could not create team."
+            );
+          })
+          .finally(() => {
+            if (addBtn) addBtn.disabled = false;
+          });
       }
 
       function saveTeams() {
         localStorage.setItem(TEAM_STORAGE_KEY, JSON.stringify(teams));
-        scheduleFolderSync();
       }
 
       function renderTeamManager() {
@@ -2970,6 +3197,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           const count = tasks.filter(t => t.team === team).length;
           const row = document.createElement("div");
           row.className = "team-row";
+          row.dataset.projectId = projectIds[team] || "";
 
           const nameCell = document.createElement("div");
           nameCell.className = "team-cell team-name-cell";
@@ -3004,7 +3232,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           saveBtn.textContent = "Save";
           saveBtn.hidden = true;
 
-          saveBtn.addEventListener("click", () => {
+          saveBtn.addEventListener("click", async () => {
             const newName = input.value.trim();
 
             if (!newName) {
@@ -3022,6 +3250,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             if (newName !== team) {
+              if (!can("projects.rename")) return;
+              saveBtn.disabled = true;
+              try {
+                await settingsSync.renameProject(team, newName);
+              } catch (error) {
+                console.error("Rename project failed.", error);
+                saveBtn.disabled = false;
+                input.value = team;
+                window.alert(error instanceof Error ? error.message : "Could not rename project.");
+                return;
+              }
+              saveBtn.disabled = false;
+
               teams = teams.map(t => t === team ? newName : t);
               tasks = tasks.map(task =>
                 task.team === team ? { ...task, team: newName } : task
@@ -3083,7 +3324,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           const membersTitle = document.createElement("div");
           membersTitle.className = "team-members-title";
-          membersTitle.textContent = `Project members Â· ${team}`;
+          membersTitle.textContent = `Project members · ${team}`;
           membersPanel.appendChild(membersTitle);
 
           const memberOptions = document.createElement("div");
@@ -3108,6 +3349,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               checkbox.dataset.permissionMode = "disable";
 
               checkbox.addEventListener("change", () => {
+                if (!can("projects.manageMembers")) {
+                  checkbox.checked = !checkbox.checked;
+                  return;
+                }
                 if (!teamMembers[team]) teamMembers[team] = [];
 
                 if (checkbox.checked) {
@@ -3121,16 +3366,18 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                 if (!checkbox.checked && teamLeaders[team] === staffName) {
                   teamLeaders[team] = "";
                   saveTeamLeaders();
+                  settingsSync.scheduleProjectLeaderSync(team);
                 }
 
                 saveTeamMembers();
+                settingsSync.scheduleProjectMembersSync(team);
                 memberCell.textContent = String((teamMembers[team] || []).length);
                 refreshLeaderOptions();
               });
 
               const profile = staffProfiles[staffName] || { role: "" };
               const memberText = profile.role
-                ? `${staffName} Â· ${profile.role}`
+                ? `${staffName} · ${profile.role}`
                 : staffName;
 
               label.appendChild(checkbox);
@@ -3143,7 +3390,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             const groupedStaff = [];
             staff.forEach(staffName => {
               const memberships = orgTeamsForStaff(staffName);
-              const groupName = memberships.length ? memberships.join(" Â· ") : "No Teams";
+              const groupName = memberships.length ? memberships.join(" · ") : "No Teams";
               let group = groupedStaff.find(item => item.name === groupName);
               if (!group) {
                 group = { name: groupName, members: [] };
@@ -3204,6 +3451,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             if (currentLeader && !members.includes(currentLeader)) {
               teamLeaders[team] = "";
               saveTeamLeaders();
+              settingsSync.scheduleProjectLeaderSync(team);
               leaderSelect.value = "";
             } else {
               leaderSelect.value = currentLeader;
@@ -3213,6 +3461,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           refreshLeaderOptions();
 
           leaderSelect.addEventListener("change", () => {
+            if (!can("projects.manageMembers")) return;
             const selectedLeader = leaderSelect.value;
             const members = teamMembers[team] || [];
 
@@ -3221,6 +3470,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               : "";
 
             saveTeamLeaders();
+            settingsSync.scheduleProjectLeaderSync(team);
           });
 
           leaderRow.appendChild(leaderLabel);
@@ -3228,6 +3478,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           membersPanel.appendChild(leaderRow);
 
           membersBtn.addEventListener("click", () => {
+            if (!can("projects.manageMembers")) return;
             membersPanel.hidden = false;
             membersBtn.hidden = true;
             saveBtn.hidden = false;
@@ -3242,13 +3493,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           let removeArmed = false;
           let removeResetTimer = null;
 
-          removeBtn.addEventListener("click", () => {
+          removeBtn.addEventListener("click", async () => {
+            if (!can("projects.delete")) return;
             const assignedTasks = tasks.filter(t => t.team === team);
 
             if (!removeArmed) {
               removeArmed = true;
               removeBtn.textContent = assignedTasks.length > 0
-                ? `Confirm Â· move ${assignedTasks.length}`
+                ? `Confirm · move ${assignedTasks.length}`
                 : "Confirm";
 
               removeResetTimer = setTimeout(() => {
@@ -3274,11 +3526,38 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
               if (!teams.includes("Unassigned")) {
                 teams.push("Unassigned");
+                teamMembers["Unassigned"] = teamMembers["Unassigned"] || [];
+                teamLeaders["Unassigned"] = teamLeaders["Unassigned"] || "";
+              }
+
+              if (!projectIds["Unassigned"]) {
+                try {
+                  const unassigned = await settingsSync.createProject("Unassigned");
+                  projectIds[unassigned.name] = unassigned.id;
+                } catch (error) {
+                  console.error("Could not ensure Unassigned project.", error);
+                }
               }
 
               tasks = tasks.map(task =>
                 task.team === team ? { ...task, team: "Unassigned" } : task
               );
+            }
+
+            removeBtn.disabled = true;
+            try {
+              if (assignedTasks.length > 0) {
+                save();
+                await new Promise(resolve => setTimeout(resolve, 400));
+              }
+              await settingsSync.deleteProject(team);
+            } catch (error) {
+              console.error("Delete project failed.", error);
+              removeBtn.disabled = false;
+              removeArmed = false;
+              removeBtn.textContent = "Remove";
+              window.alert(error instanceof Error ? error.message : "Could not remove project.");
+              return;
             }
 
             teams = teams.filter(t => t !== team);
@@ -3320,6 +3599,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             onReorder: nextList => {
               teams = nextList;
               saveTeams();
+              scheduleFolderSync();
               populateTeamFilter();
               renderTeamManager();
               render();
@@ -3365,21 +3645,38 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           showFormFeedback(
             [newTeamName],
             projectFormFeedback,
-            `A project named â€œ${name}â€ already exists.`
+            `A project named "${name}" already exists.`
           );
           return;
         }
 
         clearFormFeedback([newTeamName], projectFormFeedback);
-        teams.push(name);
-        teamMembers[name] = [];
-        teamLeaders[name] = "";
-        saveTeams();
-        saveTeamMembers();
-        saveTeamLeaders();
-        newTeamName.value = "";
-        populateTeamFilter();
-        renderTeamManager();
+        const addBtn = document.getElementById("addTeamBtn");
+        if (addBtn) addBtn.disabled = true;
+
+        void settingsSync.createProject(name)
+          .then(body => {
+            teams.push(body.name);
+            teamMembers[body.name] = [];
+            teamLeaders[body.name] = "";
+            saveTeams();
+            saveTeamMembers();
+            saveTeamLeaders();
+            newTeamName.value = "";
+            populateTeamFilter();
+            renderTeamManager();
+          })
+          .catch(error => {
+            console.error("Create project failed.", error);
+            showFormFeedback(
+              [newTeamName],
+              projectFormFeedback,
+              error instanceof Error ? error.message : "Could not create project."
+            );
+          })
+          .finally(() => {
+            if (addBtn) addBtn.disabled = false;
+          });
       }
 
       function populateOrgTeamFilter() {
@@ -3669,7 +3966,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             ${sortedUpdates.map(update => {
               const wasUpdatedToday = isTodayTimestamp(update.createdAt);
               const timestampHtml = wasUpdatedToday
-                ? `<span class="task-update-time task-update-today">Updated Today Â· ${escapeHtml(hoursAgoLabel(update.createdAt))}</span>`
+                ? `<span class="task-update-time task-update-today">Updated Today · ${escapeHtml(hoursAgoLabel(update.createdAt))}</span>`
                 : `<span class="task-update-time">${escapeHtml(formatUpdateTimestamp(update.createdAt))}</span>`;
 
               return `
@@ -3736,6 +4033,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   class="column-add-btn"
                   data-permission="tasks.create"
                   data-permission-mode="disable"
+                  ${currentFilter === "All" ? 'data-non-permission-disabled="true"' : ""}
                   ${currentFilter === "All" ? "disabled" : ""}
                   title="${currentFilter === "All" ? "Select a specific project to add tasks" : "Add task to " + status}"
                 >+ Add</button>
@@ -3746,7 +4044,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             <div class="inline-editor" data-editor-status="${status}">
               <div class="inline-editor-inner">
                 <div class="inline-editor-panel">
-                  <div class="inline-editor-title">New task Â· ${displayStatusLabel(status)}</div>
+                  <div class="inline-editor-title">New task · ${displayStatusLabel(status)}</div>
                   <input type="hidden" class="inline-task-id">
 
                   <div class="inline-editor-grid">
@@ -3813,7 +4111,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             setOwnerChecklist(ownerInput, currentFilter, []);
             priorityInput.value = "Low";
             dueInput.value = "";
-            editorTitle.textContent = `New task Â· ${status}`;
+            editorTitle.textContent = `New task · ${status}`;
           }
 
           function openInlineEditor(task = null) {
@@ -3829,7 +4127,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               setOwnerChecklist(ownerInput, task.team || currentFilter, taskOwners(task));
               priorityInput.value = task.priority === "High" ? "High" : "Low";
               dueInput.value = task.due || "";
-              editorTitle.textContent = `Edit task Â· ${status}`;
+              editorTitle.textContent = `Edit task · ${status}`;
             } else {
               resetInlineEditor();
             }
@@ -3844,6 +4142,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           }
 
           addBtn.addEventListener("click", () => {
+            if (!can("tasks.create")) return;
             if (editor.classList.contains("open") && !idInput.value) {
               closeInlineEditor();
             } else {
@@ -3854,13 +4153,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           cancelInlineBtn.addEventListener("click", closeInlineEditor);
 
           saveInlineBtn.addEventListener("click", () => {
+            const editingId = idInput.value;
+            if (editingId ? !can("tasks.edit") : !can("tasks.create")) return;
+
             const title = titleInput.value.trim();
             if (!title) {
               titleInput.focus();
               return;
             }
 
-            const editingId = idInput.value;
             const existing = editingId ? tasks.find(t => t.id === editingId) : null;
 
             const selectedOwners = selectedOwnersFromChecklist(ownerInput);
@@ -3885,6 +4186,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             save();
+            closeInlineEditor();
             render();
           });
 
@@ -3945,7 +4247,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                       <textarea class="task-update-input" placeholder="Add latest update..."></textarea>
                       <div class="task-update-actions">
                         <button type="button" class="btn-secondary task-update-cancel">Cancel</button>
-                        <button type="button" class="btn-primary task-update-save">Save</button>
+                        <button type="button" class="btn-primary task-update-save" data-permission="tasks.addUpdate">Save</button>
                       </div>
                     </div>
                   </div>
@@ -3965,7 +4267,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                     <div class="task-due${(isCompletedTask || !canEditTasks) ? "" : " task-due-quick-trigger"}"${(isCompletedTask || !canEditTasks) ? "" : ' title="Click to change due date"'}>${escapeHtml(formatDue(task.due))}</div>
                   </div>
                   <div class="actions">
-                    ${(isCompletedTask || !canEditTasks) ? "" : '<button class="icon-btn edit-btn" type="button">Edit</button>'}
+                    ${(isCompletedTask || !canEditTasks) ? "" : '<button class="icon-btn edit-btn" type="button" data-permission="tasks.edit">Edit</button>'}
                     <button class="icon-btn delete-btn" type="button" data-permission="tasks.delete">${isCompletedTask ? "Archive" : "Delete"}</button>
                   </div>
                 </div>
@@ -4411,6 +4713,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               });
 
               updateToggle.addEventListener("click", e => {
+                if (!can("tasks.addUpdate")) return;
                 e.preventDefault();
                 e.stopPropagation();
                 card.draggable = false;
@@ -4435,6 +4738,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               updateSave.addEventListener("click", e => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (!can("tasks.addUpdate")) return;
 
                 const text = updateInput.value.trim();
                 if (!text) {
@@ -4459,7 +4763,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   ]
                 };
 
-                save();
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+                localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+                void trackerSync.syncTaskUpdate(task.id, text);
                 sessionStorage.setItem("task-tracker-open-updates", task.id);
                 render();
               });
@@ -4477,12 +4783,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               if (editBtn) editBtn.addEventListener("click", e => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (!can("tasks.edit")) return;
                 renderTaskCardEditor();
               });
 
               deleteBtn.addEventListener("click", e => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (!can("tasks.delete")) return;
                 card.draggable = false;
 
                 if (isCompletedTask) {
@@ -4501,19 +4809,22 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
                 deletedTasks.push({
                   ...task,
-                  trashId: crypto.randomUUID(),
                   previousStatus: task.status,
                   deletedAt: new Date().toISOString()
                 });
 
                 tasks = tasks.filter(t => t.id !== task.id);
-                save();
-                saveTrash();
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+                localStorage.setItem(TRASH_STORAGE_KEY, JSON.stringify(deletedTasks));
+                localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+                updateTrashCount();
+                void trackerSync.syncTaskDelete(task.id);
                 render();
               });
             }
 
             function renderTaskCardEditor() {
+              if (!can("tasks.edit")) return;
               card.classList.add("editing");
               card.draggable = false;
 
@@ -4576,6 +4887,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               saveBtn.addEventListener("click", e => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (!can("tasks.edit")) return;
 
                 const newTitle = titleInput.value.trim();
                 if (!newTitle) {
@@ -4652,6 +4964,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               moveTaskRelative(draggedId, task.id, status, placeAfter);
               clearTaskDropIndicators();
               save();
+              void trackerSync.syncTaskMove(draggedId, status);
               render();
 
               if (!wasCompleted && status === "Done") celebrateTaskCompletion(draggedId);
@@ -4710,6 +5023,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             moveTaskToColumnEnd(draggedId, status, visibleTargetIds);
             clearTaskDropIndicators();
             save();
+            void trackerSync.syncTaskMove(draggedId, status);
             render();
 
             if (!wasCompleted && status === "Done") celebrateTaskCompletion(draggedId);
@@ -4744,11 +5058,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       resetPermissionsBtn.addEventListener("click", () => {
         if (!can("settings.editPermissions")) return;
-        if (!confirm("Reset all roles to the default permission matrix? This cannot be undone.")) return;
+        if (!confirm("Reset all roles to the default permission matrix? Click Save Permissions to apply.")) return;
         permissionMatrix = structuredClone(DEFAULT_PERMISSION_MATRIX);
-        savePermissionMatrix();
+        markPermissionMatrixDirty();
         renderSettingsView();
-        applyPermissionGating();
+        refreshPermissionsUi({ skipSettings: true });
+      });
+
+      savePermissionsBtn.addEventListener("click", () => {
+        void persistPermissionMatrix();
       });
 
       exportDataBtn.addEventListener("click", exportBackup);
@@ -4769,19 +5087,17 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
       }
 
-      // Sweeps every element carrying data-permission="<actionId>" and hides
-      // (default) or disables (data-permission-mode="disable") it based on
-      // can(actionId). Only ever ADDS hidden/disabled â€” it never re-enables
-      // something a render function already disabled for an unrelated reason
-      // (e.g. the "add task" button being disabled when no project is picked).
       function applyPermissionGating(root = document) {
         root.querySelectorAll("[data-permission]").forEach(el => {
           const allowed = can(el.dataset.permission);
           if (el.dataset.permissionMode === "disable") {
-            if (!allowed) el.disabled = true;
             el.classList.toggle("permission-disabled", !allowed);
+            el.disabled = !allowed || el.dataset.nonPermissionDisabled === "true";
           } else {
             el.hidden = !allowed;
+            if ("disabled" in el) {
+              el.disabled = !allowed;
+            }
           }
         });
       }
@@ -5075,6 +5391,157 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       populateStaffFilter();
       setupAuthenticatedUserUi();
       populateCurrentUserSelect();
+
+      function reloadWorkspaceState(data) {
+        applyPreloadedWorkspace(data);
+        tasks = readStoredJson(STORAGE_KEY, demoTasks, isRecordArray).map(task => taskWithOwners({
+          ...task,
+          status: task.status === "Backlog" ? "To Do" : task.status,
+          priority: task.priority === "High" ? "High" : "Low"
+        }, task.owners || task.owner));
+        deletedTasks = readStoredJson(TRASH_STORAGE_KEY, [], isRecordArray).map(task => taskWithOwners({
+          ...task
+        }, task.owners || task.owner));
+        archivedTasks = readStoredJson(ARCHIVED_STORAGE_KEY, [], isRecordArray).map(task => taskWithOwners({
+          ...task,
+          archivedId: task.archivedId || crypto.randomUUID()
+        }, task.owners || task.owner));
+        teams = readStoredJson(TEAM_STORAGE_KEY, [...defaultTeams], isStringArray);
+        staff = readStoredJson(STAFF_STORAGE_KEY, [...defaultStaff], isStringArray);
+        staffProfiles = readStoredJson(
+          STAFF_PROFILES_STORAGE_KEY,
+          {},
+          value => isRecord(value) && Object.values(value).every(isRecord)
+        );
+        orgTeams = readStoredJson(ORG_TEAMS_STORAGE_KEY, [], isStringArray);
+        orgTeamMembers = readStoredJson(
+          ORG_TEAM_MEMBERS_STORAGE_KEY,
+          {},
+          isStringArrayRecord
+        );
+        schedule = normalizeSchedule(
+          readStoredJson(SCHEDULE_STORAGE_KEY, { events: [] }, isValidSchedule)
+        );
+        teamMembers = readStoredJson(TEAM_MEMBERS_STORAGE_KEY, null, isStringArrayRecord) || {};
+        teamLeaders = readStoredJson(TEAM_LEADERS_STORAGE_KEY, {}, isStringRecord);
+        if (!permissionMatrixDirty) {
+          permissionMatrix = readStoredJson(
+            PERMISSION_MATRIX_STORAGE_KEY,
+            DEFAULT_PERMISSION_MATRIX,
+            isValidPermissionMatrix
+          );
+        }
+        updateTrashCount();
+        updateArchivedCount();
+        populateTeamFilter();
+        populateOrgTeamFilter();
+        populateStaffFilter();
+        trackerSync.snapshotKnownIds();
+        if (!permissionMatrixDirty) {
+          refreshPermissionsUi({ skipSettings: true });
+        } else {
+          applyPermissionGating();
+        }
+      }
+
+      function highlightNotificationTarget(element) {
+        if (!element) return;
+        element.classList.add("notification-target-highlight");
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        window.setTimeout(() => {
+          element.classList.remove("notification-target-highlight");
+        }, 2600);
+      }
+
+      function navigateToNotification(notification) {
+        if (!notification) return;
+
+        if (notification.type === "TASK_ASSIGNED" || notification.resourceType === "task") {
+          switchWorkspaceView("tasks");
+          render();
+          const card = document.querySelector(`[data-id="${notification.resourceId}"]`);
+          highlightNotificationTarget(card);
+          return;
+        }
+
+        if (notification.type === "PROJECT_ASSIGNED" || notification.resourceType === "project") {
+          switchWorkspaceView("teams");
+          renderTeamManager();
+          const row = document.querySelector(`.team-row[data-project-id="${notification.resourceId}"]`);
+          highlightNotificationTarget(row);
+          return;
+        }
+
+        if (notification.type === "SCHEDULE_INVITED" || notification.resourceType === "schedule") {
+          switchWorkspaceView("schedule");
+          const event = getScheduleEventById(notification.resourceId);
+          if (event) {
+            openScheduleModal(event);
+          } else {
+            renderScheduleView();
+          }
+        }
+      }
+
+      let notificationCenter = null;
+      if (authUser?.staffMember?.id) {
+        notificationCenter = createNotificationCenter({
+          recipientStaffId: authUser.staffMember.id,
+          navigate: navigateToNotification,
+        });
+      }
+
+      trackerSync = createTrackerSync({
+        getTasks: () => tasks,
+        setTasks: nextTasks => {
+          tasks = nextTasks;
+        },
+        getDeletedTasks: () => deletedTasks,
+        setDeletedTasks: nextDeletedTasks => {
+          deletedTasks = nextDeletedTasks;
+        },
+        getArchivedTasks: () => archivedTasks,
+        setArchivedTasks: nextArchivedTasks => {
+          archivedTasks = nextArchivedTasks;
+        },
+        getSchedule: () => schedule,
+        setSchedule: (nextSchedule, options = {}) => {
+          schedule = nextSchedule;
+          if (options.persist) {
+            localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
+            localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+          }
+        },
+        applyWorkspaceData: reloadWorkspaceState,
+        render,
+        renderTrash,
+        renderScheduleView,
+        setBackupStatus,
+        onNotificationCreated: (notification) => {
+          notificationCenter?.handleRemoteNotification(notification);
+        },
+        refreshNotifications: () => notificationCenter?.refresh(),
+      });
+
+      settingsSync = createSettingsSync({
+        getProjectIds: () => projectIds,
+        setProjectIds: nextIds => {
+          projectIds = nextIds;
+        },
+        getOrgTeamIds: () => orgTeamIds,
+        setOrgTeamIds: nextIds => {
+          orgTeamIds = nextIds;
+        },
+        getStaffIds: () => staffIds,
+        setStaffIds: nextIds => {
+          staffIds = nextIds;
+        },
+        getTeamMembers: () => teamMembers,
+        getTeamLeaders: () => teamLeaders,
+        getOrgTeamMembers: () => orgTeamMembers,
+        setBackupStatus,
+      });
+
       if (preloadData) {
         updateTrashCount();
         updateArchivedCount();
@@ -5094,6 +5561,21 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       applyPermissionGating();
       switchWorkspaceView("tasks");
       initializeFolderPersistence();
+      trackerSync.init(initialWorkspaceRevision);
+
+      if (notificationCenter) {
+        void notificationCenter.init();
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") {
+            void notificationCenter.refresh();
+          }
+        });
+        const deepLinkParams = new URLSearchParams(window.location.search);
+        notificationCenter.consumeDeepLink(
+          deepLinkParams.get("notify"),
+          deepLinkParams.get("id"),
+        );
+      }
   
 
 }

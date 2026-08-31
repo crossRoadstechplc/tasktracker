@@ -7,7 +7,7 @@ import { TRACKER_SHELL_HTML } from "@/src/tracker/tracker-shell";
 
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; data: WorkspaceData | null; authUser: AuthUserResponse }
+  | { status: "ready"; data: WorkspaceData | null; authUser: AuthUserResponse; workspaceRevision: number }
   | { status: "error"; message: string };
 
 export function TrackerApp() {
@@ -51,12 +51,21 @@ export function TrackerApp() {
 
         if (workspaceResponse.ok) {
           const data = (await workspaceResponse.json()) as WorkspaceData;
-          setLoadState({ status: "ready", data, authUser });
+          const revisionHeader = workspaceResponse.headers.get("X-Workspace-Revision");
+          const workspaceRevision = revisionHeader
+            ? Number.parseInt(revisionHeader, 10)
+            : 0;
+          setLoadState({
+            status: "ready",
+            data,
+            authUser,
+            workspaceRevision: Number.isFinite(workspaceRevision) ? workspaceRevision : 0,
+          });
           return;
         }
 
         if (workspaceResponse.status === 404) {
-          setLoadState({ status: "ready", data: null, authUser });
+          setLoadState({ status: "ready", data: null, authUser, workspaceRevision: 0 });
           return;
         }
 
@@ -90,6 +99,7 @@ export function TrackerApp() {
       initTrackerApp({
         preloadData: loadState.data ?? undefined,
         authUser: loadState.authUser,
+        workspaceRevision: loadState.workspaceRevision,
       });
     });
   }, [loadState]);

@@ -21,10 +21,17 @@ enum TaskStatus {
   DONE
 }
 
+enum NotificationType {
+  TASK_ASSIGNED
+  PROJECT_ASSIGNED
+  SCHEDULE_INVITED
+}
+
 model Workspace {
   id        String   @id @default(cuid())
   slug      String   @unique @default("default")
   name      String   @default("Company Task Tracker")
+  revision  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -36,6 +43,25 @@ model Workspace {
   archivedTasks   ArchivedTask[]
   scheduleEvents  ScheduleEvent[]
   permissionRules PermissionRule[]
+  events          WorkspaceEvent[]
+  notifications   Notification[]
+}
+
+model WorkspaceEvent {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  revision      Int
+  type          String
+  resource      String
+  resourceId    String?
+  payload       Json
+  actorUserId   String?
+  actorClientId String?
+  createdAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, revision])
 }
 
 model StaffMember {
@@ -57,6 +83,8 @@ model StaffMember {
   orgTeamMembers  OrgTeamMember[]
   ledProjects     Project[]            @relation("ProjectLeader")
   scheduleGuests  ScheduleEventGuest[]
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsSent     Notification[] @relation("NotificationActor")
 
   @@unique([workspaceId, displayName])
   @@index([workspaceId, sortOrder])
@@ -246,4 +274,24 @@ model PermissionRule {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, role, actionId])
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  workspaceId  String
+  recipientId  String
+  type         NotificationType
+  title        String
+  body         String
+  resourceType String
+  resourceId   String
+  actorStaffId String?
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  recipient StaffMember  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     StaffMember? @relation("NotificationActor", fields: [actorStaffId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, readAt, createdAt])
 }

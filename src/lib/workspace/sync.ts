@@ -179,7 +179,7 @@ export async function syncLegacyWorkspaceData(
     for (const deletedTask of data.deletedTasks) {
       await tx.deletedTask.create({
         data: {
-          trashId: deletedTask.trashId,
+          trashId: deletedTask.trashId ?? randomUUID(),
           workspaceId,
           previousStatus: deletedTask.previousStatus,
           deletedAt: new Date(deletedTask.deletedAt),

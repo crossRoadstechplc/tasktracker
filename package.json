@@ -9,11 +9,15 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "tsx tests/e2e/run.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:auth": "tsx prisma/seed-auth.ts",
+    "db:cleanup-test": "tsx scripts/cleanup-test-data.ts",
+    "db:cleanup-test:dry-run": "tsx scripts/cleanup-test-data.ts --dry-run",
+    "db:up": "docker compose up -d",
     "build:tracker": "node scripts/build-tracker-app.mjs",
     "postinstall": "prisma generate"
   },
@@ -42,7 +46,7 @@
     "prisma": "^7.10.0",
     "tsx": "^4.23.12",
     "typescript": "^5",
-    "vitest": "^4.1.11"
+    "vitest": "^3.2.4"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

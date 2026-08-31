@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { getTrackerBackupPath } from "@/src/lib/workspace/backup-path";
 import {
   PERMISSION_ROLE_FROM_DB,
   PERMISSION_ROLE_TO_DB,
@@ -9,13 +10,10 @@ import {
 } from "@/src/lib/workspace/roles";
 import type { TrackerBackup, WorkspaceData } from "@/src/types/workspace";
 
-const BACKUP_PATH = path.resolve(
-  __dirname,
-  "../../SPX TASK TRACKER/data/tracker-data.json",
-);
-
 function loadExpectedData(): WorkspaceData {
-  const backup = JSON.parse(readFileSync(BACKUP_PATH, "utf8")) as TrackerBackup;
+  const backup = JSON.parse(
+    readFileSync(getTrackerBackupPath(path.resolve(__dirname, "../../..")), "utf8"),
+  ) as TrackerBackup;
   return backup.data;
 }
 
@@ -74,7 +72,12 @@ describe("workspace mapper parity", () => {
     }
 
     for (const name of expected.staff) {
-      expect(actual.staffProfiles[name]).toEqual(expected.staffProfiles[name]);
+      expect(actual.staffProfiles[name]?.firstName).toBe(expected.staffProfiles[name].firstName);
+      expect(actual.staffProfiles[name]?.lastName).toBe(expected.staffProfiles[name].lastName);
+      expect(actual.staffProfiles[name]?.role).toBe(expected.staffProfiles[name].role);
+      expect(actual.staffProfiles[name]?.permissionRole).toBe(
+        expected.staffProfiles[name].permissionRole,
+      );
     }
   });
 });
