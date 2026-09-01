@@ -57,7 +57,7 @@ export async function apiFetch(
   const response = await fetch(`${getBaseUrl()}${path}`, {
     ...init,
     headers,
-    signal: init.signal ?? AbortSignal.timeout(30_000),
+    signal: init.signal ?? AbortSignal.timeout(60_000),
   });
   jar.storeFromResponse(response);
   return response;

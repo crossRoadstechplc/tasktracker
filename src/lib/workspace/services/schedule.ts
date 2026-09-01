@@ -9,11 +9,18 @@ import {
 import { loadScheduleLegacy } from "@/src/lib/workspace/serialize";
 import type { ScheduleEvent } from "@/src/types/workspace";
 import type { ActorContext } from "@/src/lib/workspace/services/tasks";
+import { viewerFromActor } from "@/src/lib/workspace/services/tasks";
 import {
   createAssignmentNotifications,
   getNewAssigneeIds,
   resolveActorStaffId,
 } from "@/src/lib/notifications/service";
+import {
+  assertProjectAccess,
+  assertScheduleEventAccess,
+  getProjectMemberStaffIds,
+  mergeScheduleRecipientIds,
+} from "@/src/lib/workspace/visibility";
 
 export async function createScheduleEvent(input: {
   actor: ActorContext;
@@ -24,6 +31,10 @@ export async function createScheduleEvent(input: {
   const projectId = input.event.project
     ? await getProjectIdByName(workspace.id, input.event.project)
     : null;
+
+  if (projectId) {
+    await assertProjectAccess(workspace.id, projectId, viewerFromActor(input.actor));
+  }
 
   const { nameToId } = await buildStaffDisplayNameMap(workspace.id);
   const guestStaffIds = (input.event.guests ?? [])
@@ -62,7 +73,9 @@ export async function createScheduleEvent(input: {
   });
 
   const actorStaffId = await resolveActorStaffId(workspace.id, input.actor.userId);
-  const recipientIds = getNewAssigneeIds(new Set(), guestStaffIds, actorStaffId);
+  const projectMemberIds = projectId ? await getProjectMemberStaffIds(projectId) : [];
+  const allRecipientIds = mergeScheduleRecipientIds(projectMemberIds, guestStaffIds);
+  const recipientIds = getNewAssigneeIds(new Set(), allRecipientIds, actorStaffId);
   await createAssignmentNotifications({
     workspaceId: workspace.id,
     type: "SCHEDULE_INVITED",
@@ -91,7 +104,10 @@ export async function updateScheduleEvent(input: {
   });
   if (!existing) throw new Error("Schedule event not found.");
 
+  await assertScheduleEventAccess(workspace.id, input.eventId, viewerFromActor(input.actor));
+
   const previousGuestIds = new Set(existing.guests.map((guest) => guest.staffMemberId));
+  const previousProjectId = existing.projectId;
   let nextGuestIds: string[] | null = null;
 
   let projectId = existing.projectId;
@@ -99,6 +115,9 @@ export async function updateScheduleEvent(input: {
     projectId = input.patch.project
       ? await getProjectIdByName(workspace.id, input.patch.project)
       : null;
+    if (projectId) {
+      await assertProjectAccess(workspace.id, projectId, viewerFromActor(input.actor));
+    }
   }
 
   const { nameToId } = await buildStaffDisplayNameMap(workspace.id);
@@ -147,9 +166,25 @@ export async function updateScheduleEvent(input: {
     payload: event,
   });
 
-  if (nextGuestIds) {
+  const recipientsChanged =
+    input.patch.guests !== undefined || input.patch.project !== undefined;
+  if (recipientsChanged) {
+    const currentGuestIds = nextGuestIds ?? [...previousGuestIds];
+    const previousProjectMemberIds = previousProjectId
+      ? await getProjectMemberStaffIds(previousProjectId)
+      : [];
+    const nextProjectMemberIds = projectId ? await getProjectMemberStaffIds(projectId) : [];
+    const previousRecipientIds = mergeScheduleRecipientIds(
+      previousProjectMemberIds,
+      [...previousGuestIds],
+    );
+    const nextRecipientIds = mergeScheduleRecipientIds(nextProjectMemberIds, currentGuestIds);
     const actorStaffId = await resolveActorStaffId(workspace.id, input.actor.userId);
-    const recipientIds = getNewAssigneeIds(previousGuestIds, nextGuestIds, actorStaffId);
+    const recipientIds = getNewAssigneeIds(
+      new Set(previousRecipientIds),
+      nextRecipientIds,
+      actorStaffId,
+    );
     await createAssignmentNotifications({
       workspaceId: workspace.id,
       type: "SCHEDULE_INVITED",
@@ -176,6 +211,8 @@ export async function deleteScheduleEvent(input: {
     where: { id: input.eventId, workspaceId: workspace.id },
   });
   if (!existing) throw new Error("Schedule event not found.");
+
+  await assertScheduleEventAccess(workspace.id, input.eventId, viewerFromActor(input.actor));
 
   await prisma.scheduleEventGuest.deleteMany({ where: { eventId: input.eventId } });
   await prisma.scheduleEvent.delete({ where: { id: input.eventId } });

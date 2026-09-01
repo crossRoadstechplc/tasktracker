@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PageLoader } from "@/src/components/PageLoader";
 
 export function ChangePasswordForm() {
   const router = useRouter();
@@ -63,9 +64,12 @@ export function ChangePasswordForm() {
           ? submitError.message
           : "Could not update password.";
       setError(message);
-    } finally {
       setLoading(false);
     }
+  }
+
+  if (loading) {
+    return <PageLoader />;
   }
 
   return (

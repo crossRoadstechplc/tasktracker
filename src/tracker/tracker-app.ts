@@ -590,6 +590,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const scheduleEventTitle = document.getElementById("scheduleEventTitle");
       const scheduleEventAllDay = document.getElementById("scheduleEventAllDay");
       const scheduleEventDate = document.getElementById("scheduleEventDate");
+      const scheduleEventDatePicker = document.getElementById("scheduleEventDatePicker");
+      const scheduleEventDatePickerBtn = document.getElementById("scheduleEventDatePickerBtn");
       const scheduleEventStartTime = document.getElementById("scheduleEventStartTime");
       const scheduleEventEndTime = document.getElementById("scheduleEventEndTime");
       const scheduleStartTimeField = document.getElementById("scheduleStartTimeField");
@@ -598,6 +600,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const scheduleEventLocation = document.getElementById("scheduleEventLocation");
       const scheduleEventProject = document.getElementById("scheduleEventProject");
       const scheduleEventDescription = document.getElementById("scheduleEventDescription");
+      const scheduleProjectHelper = document.getElementById("scheduleProjectHelper");
+      const scheduleProjectTeamPreview = document.getElementById("scheduleProjectTeamPreview");
+      const scheduleProjectTeamList = document.getElementById("scheduleProjectTeamList");
+      const scheduleGuestHelper = document.getElementById("scheduleGuestHelper");
       const scheduleGuestSelect = document.getElementById("scheduleGuestSelect");
       const scheduleGuestList = document.getElementById("scheduleGuestList");
       const scheduleColorRow = document.getElementById("scheduleColorRow");
@@ -2214,6 +2220,46 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         return sorted;
       }
 
+      function toDateInputValue(date) {
+        return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+      }
+
+      function parseDateInputValue(value) {
+        const match = String(value || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        const year = Number(match[1]);
+        const monthIndex = Number(match[2]) - 1;
+        const day = Number(match[3]);
+        if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+        const date = new Date(year, monthIndex, day);
+        if (date.getFullYear() !== year || date.getMonth() !== monthIndex || date.getDate() !== day) return null;
+        return date;
+      }
+
+      function syncScheduleNativeDatePicker(date) {
+        if (!scheduleEventDatePicker || !date) return;
+        scheduleEventDatePicker.value = toDateInputValue(date);
+      }
+
+      function openScheduleDatePicker() {
+        if (!scheduleEventDatePicker || scheduleEventDatePicker.disabled) return;
+        const parsed = parseDisplayDate(scheduleEventDate.value);
+        if (parsed) syncScheduleNativeDatePicker(parsed);
+        if (typeof scheduleEventDatePicker.showPicker === "function") {
+          try {
+            scheduleEventDatePicker.showPicker();
+            return;
+          } catch (error) {
+            // Fall through to click fallback.
+          }
+        }
+        try {
+          scheduleEventDatePicker.click();
+        } catch (error) {
+          scheduleEventDatePicker.focus();
+        }
+      }
+
       function formatDisplayDate(date) {
         return `${pad2(date.getDate())}-${SCHEDULE_MONTHS[date.getMonth()]}-${date.getFullYear()}`;
       }
@@ -2262,6 +2308,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           scheduleEventTitle,
           scheduleEventAllDay,
           scheduleEventDate,
+          scheduleEventDatePicker,
           scheduleEventStartTime,
           scheduleEventEndTime,
           scheduleEventLocation,
@@ -2272,6 +2319,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         scheduleFields.forEach(field => {
           if (field) field.disabled = !canSave;
         });
+        if (scheduleEventDatePickerBtn) scheduleEventDatePickerBtn.disabled = !canSave;
         scheduleColorRow.querySelectorAll("button").forEach(btn => {
           btn.disabled = !canSave;
         });
@@ -2282,6 +2330,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         syncScheduleModalTimeInputs(start, end, scheduleEventAllDay.checked);
         renderScheduleProjectDropdown();
         scheduleEventProject.value = teams.includes(eventData.project) ? eventData.project : "";
+        renderScheduleProjectSection();
         renderScheduleGuestDropdown();
         renderScheduleColorSwatches();
         applyPermissionGating(scheduleModalBackdrop);
@@ -2291,6 +2340,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function syncScheduleModalTimeInputs(start, end, allDay) {
         scheduleEventDate.value = formatDisplayDate(start);
+        syncScheduleNativeDatePicker(start);
         scheduleEventStartTime.value = toTimeInputValue(start);
         scheduleEventEndTime.value = toTimeInputValue(end <= start ? new Date(start.getTime() + 60 * 60 * 1000) : end);
         scheduleStartTimeField.hidden = allDay;
@@ -2314,21 +2364,85 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         });
       }
 
-      function renderScheduleGuestDropdown() {
-        scheduleGuestSelect.innerHTML = '<option value="">Add guest...</option>';
+      function selectedScheduleProject() {
+        return scheduleEventProject?.value || "";
+      }
+
+      function scheduleGuestPool() {
+        const project = selectedScheduleProject();
+        if (!project) return [...staff];
+
+        const members = membersForTeam(project);
+        const memberSet = new Set(members);
+        const projectFirst = [...members];
         staff.forEach(name => {
+          if (!memberSet.has(name)) projectFirst.push(name);
+        });
+        return projectFirst;
+      }
+
+      function updateScheduleHelperText() {
+        const project = selectedScheduleProject();
+        if (scheduleProjectHelper) {
+          scheduleProjectHelper.textContent = project
+            ? "Everyone on this project can see this event on the schedule."
+            : "Leave blank for a personal event visible only to invited guests.";
+        }
+        if (scheduleGuestHelper) {
+          scheduleGuestHelper.textContent = project
+            ? "Pick anyone from the team. Guests are invited to this event only — they are not added to the project. All project members are also notified."
+            : "Only invited guests can see this event.";
+        }
+      }
+
+      function renderScheduleProjectTeamPreview() {
+        if (!scheduleProjectTeamPreview || !scheduleProjectTeamList) return;
+        const project = selectedScheduleProject();
+        if (!project) {
+          scheduleProjectTeamPreview.hidden = true;
+          scheduleProjectTeamList.innerHTML = "";
+          return;
+        }
+
+        const members = membersForTeam(project);
+        scheduleProjectTeamPreview.hidden = false;
+        scheduleProjectTeamList.innerHTML = members.length
+          ? members.map(name => `<li>${escapeHtml(staffTypeLabel(name))}</li>`).join("")
+          : '<li class="schedule-project-team-empty">No members assigned yet</li>';
+      }
+
+      function renderScheduleProjectSection() {
+        updateScheduleHelperText();
+        renderScheduleProjectTeamPreview();
+      }
+
+      function scheduleEventTooltip(event) {
+        const parts = [event.title || "(No title)"];
+        if (event.project) parts.push(`Project: ${event.project}`);
+        const guestCount = Array.isArray(event.guests) ? event.guests.length : 0;
+        if (guestCount) parts.push(`${guestCount} guest${guestCount === 1 ? "" : "s"}`);
+        return parts.join(" · ");
+      }
+
+      function renderScheduleGuestDropdown() {
+        const project = selectedScheduleProject();
+        const projectMembers = project ? membersForTeam(project) : [];
+        scheduleGuestSelect.innerHTML = '<option value="">Add guest...</option>';
+        scheduleGuestPool().forEach(name => {
           if (scheduleSelectedGuests.includes(name)) return;
           const option = document.createElement("option");
           option.value = name;
-          option.textContent = name;
+          const suffix = project && !projectMembers.includes(name) ? " (not in project)" : "";
+          option.textContent = staffTypeLabel(name) + suffix;
           scheduleGuestSelect.appendChild(option);
         });
 
         scheduleGuestList.innerHTML = "";
         scheduleSelectedGuests.forEach(name => {
           const chip = document.createElement("span");
-          chip.className = "schedule-guest-chip";
-          chip.appendChild(document.createTextNode(staffFirstName(name)));
+          const notInProject = project && !projectMembers.includes(name);
+          chip.className = "schedule-guest-chip" + (notInProject ? " not-in-project" : "");
+          chip.appendChild(document.createTextNode(staffFirstName(name) + (notInProject ? "*" : "")));
           const removeBtn = document.createElement("button");
           removeBtn.type = "button";
           removeBtn.setAttribute("aria-label", `Remove ${name}`);
@@ -2419,6 +2533,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function createDraftEvent(start, end, allDay = false) {
+        const project =
+          currentScheduleProjectFilter !== "All" && teams.includes(currentScheduleProjectFilter)
+            ? currentScheduleProjectFilter
+            : "";
         return {
           id: crypto.randomUUID(),
           title: "",
@@ -2427,7 +2545,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           allDay,
           description: "",
           location: "",
-          project: "",
+          project,
           color: SCHEDULE_COLORS[0],
           guests: []
         };
@@ -2519,7 +2637,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             chip.className = "schedule-event-chip";
             chip.style.background = event.color || SCHEDULE_COLORS[0];
             chip.textContent = event.title || "(No title)";
-            chip.title = event.title || "(No title)";
+            chip.title = scheduleEventTooltip(event);
             chip.addEventListener("click", e => {
               e.stopPropagation();
               openScheduleModal(event);
@@ -2609,6 +2727,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             block.style.left = `calc(${col * colWidth}% + 2px)`;
             block.style.width = `calc(${colWidth}% - 4px)`;
             block.style.background = event.color || SCHEDULE_COLORS[0];
+            block.title = scheduleEventTooltip(event);
             block.innerHTML = `
               <span>${escapeHtml(event.title || "(No title)")}</span>
               <span class="schedule-event-time">${escapeHtml(formatEventTime(start))} – ${escapeHtml(formatEventTime(end))}</span>
@@ -5354,6 +5473,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (!scheduleSelectedGuests.includes(name)) scheduleSelectedGuests.push(name);
         renderScheduleGuestDropdown();
       });
+      scheduleEventProject.addEventListener("change", () => {
+        renderScheduleProjectSection();
+        renderScheduleGuestDropdown();
+      });
       scheduleEventAllDay.addEventListener("change", () => {
         const date = parseDisplayDate(scheduleEventDate.value) || new Date();
         const start = applyTimeToDate(date, scheduleEventStartTime.value || "09:00");
@@ -5364,7 +5487,26 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       scheduleEventDate.addEventListener("blur", () => {
         const date = parseDisplayDate(scheduleEventDate.value);
-        if (date) scheduleEventDate.value = formatDisplayDate(date);
+        if (date) {
+          scheduleEventDate.value = formatDisplayDate(date);
+          syncScheduleNativeDatePicker(date);
+        }
+      });
+
+      scheduleEventDatePickerBtn?.addEventListener("click", () => {
+        openScheduleDatePicker();
+      });
+
+      scheduleEventDatePicker?.addEventListener("change", () => {
+        const date = parseDateInputValue(scheduleEventDatePicker.value);
+        if (!date) return;
+        scheduleEventDate.value = formatDisplayDate(date);
+        if (scheduleEventAllDay.checked) return;
+        const start = applyTimeToDate(date, scheduleEventStartTime.value || "09:00");
+        let end = applyTimeToDate(date, scheduleEventEndTime.value || "10:00");
+        if (end <= start) end = new Date(start.getTime() + 60 * 60 * 1000);
+        scheduleEventStartTime.value = toTimeInputValue(start);
+        scheduleEventEndTime.value = toTimeInputValue(end);
       });
 
       document.addEventListener("keydown", event => {
@@ -5521,6 +5663,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           notificationCenter?.handleRemoteNotification(notification);
         },
         refreshNotifications: () => notificationCenter?.refresh(),
+        canSeeAllProjects:
+          authUser?.staffMember?.permissionRole === "Super Admin" ||
+          authUser?.staffMember?.permissionRole === "Admin",
       });
 
       settingsSync = createSettingsSync({

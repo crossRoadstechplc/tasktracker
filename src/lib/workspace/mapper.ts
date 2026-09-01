@@ -5,6 +5,10 @@ import {
   PERMISSION_ROLE_LABELS,
   TASK_STATUS_FROM_DB,
 } from "@/src/lib/workspace/roles";
+import {
+  getAccessibleProjectIds,
+  type WorkspaceViewer,
+} from "@/src/lib/workspace/visibility";
 import type {
   ArchivedTask,
   DeletedTask,
@@ -127,20 +131,70 @@ export async function getWorkspaceBySlug(slug = DEFAULT_WORKSPACE_SLUG) {
 
 export async function getLegacyWorkspaceData(
   workspaceId: string,
+  viewer?: WorkspaceViewer,
 ): Promise<WorkspaceData> {
   const workspace = await loadWorkspace(workspaceId);
+  const accessibleProjectIds = viewer
+    ? await getAccessibleProjectIds(workspaceId, viewer.staffMemberId, viewer.permissionRole)
+    : null;
+
+  const visibleProjects =
+    accessibleProjectIds === null
+      ? workspace.projects
+      : workspace.projects.filter((project) => accessibleProjectIds.has(project.id));
+
+  const visibleProjectNames = new Set(visibleProjects.map((project) => project.name));
+
+  const visibleTasks =
+    accessibleProjectIds === null
+      ? workspace.tasks
+      : workspace.tasks.filter((task) => accessibleProjectIds.has(task.projectId));
+
+  const visibleDeletedTasks =
+    accessibleProjectIds === null
+      ? workspace.deletedTasks
+      : workspace.deletedTasks.filter((entry) => {
+          const payload = entry.payload as Record<string, unknown>;
+          const team = typeof payload.team === "string" ? payload.team : "";
+          return team && visibleProjectNames.has(team);
+        });
+
+  const visibleArchivedTasks =
+    accessibleProjectIds === null
+      ? workspace.archivedTasks
+      : workspace.archivedTasks.filter((entry) => {
+          const payload = entry.payload as Record<string, unknown>;
+          const team = typeof payload.team === "string" ? payload.team : "";
+          return team && visibleProjectNames.has(team);
+        });
+
+  const visibleScheduleEvents =
+    accessibleProjectIds === null
+      ? workspace.scheduleEvents
+      : workspace.scheduleEvents.filter((event) => {
+          if (
+            event.guests.some(
+              (guest) => guest.staffMemberId === viewer!.staffMemberId,
+            )
+          ) {
+            return true;
+          }
+          if (event.projectId && accessibleProjectIds.has(event.projectId)) return true;
+          return false;
+        });
+
   const { staff, staffProfiles, idToDisplayName } = buildStaffMaps(workspace.staffMembers);
   const staffIds: Record<string, string> = {};
   for (const member of workspace.staffMembers) {
     staffIds[member.displayName] = member.id;
   }
 
-  const teams = workspace.projects.map((project) => project.name);
+  const teams = visibleProjects.map((project) => project.name);
   const projectIds: Record<string, string> = {};
   const teamMembers: Record<string, string[]> = {};
   const teamLeaders: Record<string, string> = {};
 
-  for (const project of workspace.projects) {
+  for (const project of visibleProjects) {
     projectIds[project.name] = project.id;
     teamMembers[project.name] = project.members
       .map((member) => member.staffMember.displayName)
@@ -159,9 +213,9 @@ export async function getLegacyWorkspaceData(
       .filter((name) => staff.includes(name));
   }
 
-  const tasks = workspace.tasks.map((task) => mapTask(task, idToDisplayName));
+  const tasks = visibleTasks.map((task) => mapTask(task, idToDisplayName));
 
-  const deletedTasks = workspace.deletedTasks.map((entry) => {
+  const deletedTasks = visibleDeletedTasks.map((entry) => {
     const payload = entry.payload as Record<string, unknown>;
     return {
       ...(payload as DeletedTask),
@@ -171,7 +225,7 @@ export async function getLegacyWorkspaceData(
     };
   });
 
-  const archivedTasks = workspace.archivedTasks.map((entry) => {
+  const archivedTasks = visibleArchivedTasks.map((entry) => {
     const payload = entry.payload as Record<string, unknown>;
     return {
       ...(payload as ArchivedTask),
@@ -180,7 +234,7 @@ export async function getLegacyWorkspaceData(
     };
   });
 
-  const events: ScheduleEvent[] = workspace.scheduleEvents
+  const events: ScheduleEvent[] = visibleScheduleEvents
     .filter((event) => event.start && event.end)
     .map((event) => ({
       id: event.id,
@@ -231,8 +285,16 @@ export async function getLegacyWorkspaceData(
 
 export async function getLegacyWorkspaceDataBySlug(
   slug = DEFAULT_WORKSPACE_SLUG,
+  viewer?: WorkspaceViewer,
 ): Promise<WorkspaceData | null> {
   const workspace = await getWorkspaceBySlug(slug);
   if (!workspace) return null;
-  return getLegacyWorkspaceData(workspace.id);
+  return getLegacyWorkspaceData(workspace.id, viewer);
+}
+
+export async function getLegacyWorkspaceDataForViewer(
+  slug: string,
+  viewer: WorkspaceViewer,
+): Promise<WorkspaceData | null> {
+  return getLegacyWorkspaceDataBySlug(slug, viewer);
 }

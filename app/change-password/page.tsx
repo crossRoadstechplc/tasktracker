@@ -1,20 +1,10 @@
 import { Suspense } from "react";
 import { ChangePasswordForm } from "@/src/components/ChangePasswordForm";
+import { PageLoader } from "@/src/components/PageLoader";
 
 export default function ChangePasswordPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="login-page">
-          <div className="login-card">
-            <div className="brand">
-              <h1>Company Task Tracker</h1>
-              <p>Loading…</p>
-            </div>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoader />}>
       <ChangePasswordForm />
     </Suspense>
   );

@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PageLoader } from "@/src/components/PageLoader";
 
 export function AcceptInviteForm() {
   const router = useRouter();
@@ -60,9 +61,12 @@ export function AcceptInviteForm() {
           ? submitError.message
           : "Could not accept invite.";
       setError(message);
-    } finally {
       setLoading(false);
     }
+  }
+
+  if (loading) {
+    return <PageLoader />;
   }
 
   if (!token) {

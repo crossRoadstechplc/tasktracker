@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission, requireSession } from "@/src/lib/api/guard";
 import { jsonWithSession, workspaceRevisionHeaders } from "@/src/lib/api/response";
-import { getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
+import { actorFromAuth, getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
 import { setProjectMembers } from "@/src/lib/workspace/services/projects";
 
 const membersSchema = z.object({
@@ -34,7 +34,7 @@ export async function PUT(request: Request, context: RouteContext) {
 
   try {
     const result = await setProjectMembers({
-      actor: { userId: session.auth.user.id, clientId: getActorClientId(request) },
+      actor: actorFromAuth(session.auth, getActorClientId(request)),
       projectId: id,
       memberIds: parsed.data.memberIds,
     });

@@ -1,6 +1,6 @@
 import { requirePermission, requireSession } from "@/src/lib/api/guard";
 import { jsonWithSession } from "@/src/lib/api/response";
-import { serviceErrorResponse } from "@/src/lib/api/route-helpers";
+import { actorFromAuth, serviceErrorResponse } from "@/src/lib/api/route-helpers";
 import { resendStaffInvite } from "@/src/lib/workspace/services/staff";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -29,7 +29,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
   try {
     const result = await resendStaffInvite({
-      actor: { userId: session.auth.user.id },
+      actor: actorFromAuth(session.auth),
       staffId: id,
       adminName: session.auth.staffMember.displayName,
     });

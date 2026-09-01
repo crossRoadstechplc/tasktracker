@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission, requireSession } from "@/src/lib/api/guard";
 import { jsonWithSession, workspaceRevisionHeaders } from "@/src/lib/api/response";
-import { getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
+import { actorFromAuth, getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
 import { deleteProject, updateProject } from "@/src/lib/workspace/services/projects";
 
 const patchSchema = z.object({
@@ -35,7 +35,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const result = await updateProject({
-      actor: { userId: session.auth.user.id, clientId: getActorClientId(request) },
+      actor: actorFromAuth(session.auth, getActorClientId(request)),
       projectId: id,
       ...parsed.data,
     });
@@ -65,7 +65,7 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   try {
     const result = await deleteProject({
-      actor: { userId: session.auth.user.id, clientId: getActorClientId(request) },
+      actor: actorFromAuth(session.auth, getActorClientId(request)),
       projectId: id,
     });
     return jsonWithSession(

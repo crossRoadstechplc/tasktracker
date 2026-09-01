@@ -2,11 +2,16 @@ import { prisma } from "@/src/lib/prisma";
 import { publishWorkspaceEvent } from "@/src/lib/realtime/notify";
 import { getDefaultWorkspace } from "@/src/lib/workspace/context";
 import type { ActorContext } from "@/src/lib/workspace/services/tasks";
+import { viewerFromActor } from "@/src/lib/workspace/services/tasks";
 import {
   createAssignmentNotifications,
   getNewAssigneeIds,
   resolveActorStaffId,
 } from "@/src/lib/notifications/service";
+import {
+  assertProjectAccess,
+  ensureProjectMembers,
+} from "@/src/lib/workspace/visibility";
 
 export async function createProject(input: {
   actor: ActorContext;
@@ -25,6 +30,8 @@ export async function createProject(input: {
       sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
     },
   });
+
+  await ensureProjectMembers(project.id, [input.actor.staffMemberId]);
 
   const published = await publishWorkspaceEvent({
     type: "project.created",
@@ -50,6 +57,8 @@ export async function updateProject(input: {
     where: { id: input.projectId, workspaceId: workspace.id },
   });
   if (!existing) throw new Error("Project not found.");
+
+  await assertProjectAccess(workspace.id, input.projectId, viewerFromActor(input.actor));
 
   const project = await prisma.project.update({
     where: { id: input.projectId },
@@ -82,6 +91,8 @@ export async function deleteProject(input: {
   });
   if (!existing) throw new Error("Project not found.");
 
+  await assertProjectAccess(workspace.id, input.projectId, viewerFromActor(input.actor));
+
   const taskCount = await prisma.task.count({ where: { projectId: input.projectId } });
   if (taskCount > 0) {
     throw new Error("Cannot delete a project that still has tasks.");
@@ -113,6 +124,8 @@ export async function setProjectMembers(input: {
     where: { id: input.projectId, workspaceId: workspace.id },
   });
   if (!existing) throw new Error("Project not found.");
+
+  await assertProjectAccess(workspace.id, input.projectId, viewerFromActor(input.actor));
 
   const previousMembers = await prisma.projectMember.findMany({
     where: { projectId: input.projectId },

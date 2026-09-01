@@ -12,9 +12,7 @@ const PROTECTED_EMAILS = new Set([
 ]);
 
 /** E2E / seed test accounts created by automated tests. */
-const TEST_EMAIL_PATTERNS = [
-  /^e2e-.*@tracker\.local$/i,
-];
+const TEST_EMAIL_PATTERNS = [/^e2e-.*@tracker\.local$/i];
 
 function isTestEmail(email: string): boolean {
   return TEST_EMAIL_PATTERNS.some((pattern) => pattern.test(email));
@@ -30,12 +28,22 @@ function payloadHasE2eTitle(payload: unknown): boolean {
   return isE2eTitle(record.title) || isE2eTitle(record.name);
 }
 
-async function main() {
-  const dryRun = process.argv.includes("--dry-run");
+export type CleanupTestDataOptions = {
+  dryRun?: boolean;
+  quiet?: boolean;
+};
+
+export async function cleanupTestData(options: CleanupTestDataOptions = {}): Promise<void> {
+  const dryRun = options.dryRun ?? false;
+  const quiet = options.quiet ?? false;
+  const log = (...args: unknown[]) => {
+    if (!quiet) console.log(...args);
+  };
+
   const workspace = await prisma.workspace.findUnique({ where: { slug: "default" } });
   if (!workspace) throw new Error("Default workspace not found.");
 
-  console.log(dryRun ? "DRY RUN — no changes will be made.\n" : "Cleaning test data...\n");
+  log(dryRun ? "DRY RUN — no changes will be made.\n" : "Cleaning test data...\n");
 
   const users = await prisma.user.findMany({ include: { staffMember: true } });
   const testUsers = users.filter((u) => isTestEmail(u.email) && !PROTECTED_EMAILS.has(u.email));
@@ -70,7 +78,9 @@ async function main() {
     },
   });
   const projectTaskIds = testProjects.flatMap((project) => project.tasks.map((task) => task.id));
-  const projectScheduleIds = testProjects.flatMap((project) => project.events.map((event) => event.id));
+  const projectScheduleIds = testProjects.flatMap((project) =>
+    project.events.map((event) => event.id),
+  );
   const testOrgTeams = await prisma.orgTeam.findMany({
     where: {
       workspaceId: workspace.id,
@@ -93,6 +103,13 @@ async function main() {
   );
   const removableStaffIds = removableStaff.map((s) => s.id);
 
+  const testTaskIds = [...new Set([...testTasks.map((t) => t.id), ...projectTaskIds])];
+  const testScheduleIds = [
+    ...new Set([...testScheduleEvents.map((event) => event.id), ...projectScheduleIds]),
+  ];
+  const testProjectIds = testProjects.map((project) => project.id);
+  const e2eResourceIds = [...testTaskIds, ...testScheduleIds, ...testProjectIds];
+
   const testNotifications = await prisma.notification.findMany({
     where: {
       workspaceId: workspace.id,
@@ -100,26 +117,28 @@ async function main() {
         { recipientId: { in: removableStaffIds } },
         { actorStaffId: { in: removableStaffIds } },
         { title: { startsWith: "e2e-", mode: "insensitive" } },
+        ...(e2eResourceIds.length > 0 ? [{ resourceId: { in: e2eResourceIds } }] : []),
+        { body: { contains: "e2e-", mode: "insensitive" } },
       ],
     },
   });
 
-  console.log("Will remove:");
-  console.log("  Users:", testUsers.map((u) => u.email).join(", ") || "(none)");
-  console.log("  Staff:", removableStaff.map((s) => s.displayName).join(", ") || "(none)");
-  console.log(
+  log("Will remove:");
+  log("  Users:", testUsers.map((u) => u.email).join(", ") || "(none)");
+  log("  Staff:", removableStaff.map((s) => s.displayName).join(", ") || "(none)");
+  log(
     "  Tasks:",
     testTasks.length,
     testTasks.map((t) => t.title).join(", ") || "(none)",
   );
-  console.log(
+  log(
     "  Schedule events:",
     testScheduleEvents.length,
     testScheduleEvents.map((s) => s.title).join(", ") || "(none)",
   );
-  console.log("  Deleted tasks:", allDeletedTasks.length);
+  log("  Deleted tasks:", allDeletedTasks.length);
   if (allDeletedTasks.length > 0) {
-    console.log(
+    log(
       "    titles:",
       allDeletedTasks
         .map((row) => {
@@ -129,84 +148,80 @@ async function main() {
         .join(", "),
     );
   }
-  console.log("  Archived tasks:", testArchivedTasks.length);
-  console.log("  Test projects:", testProjects.map((p) => p.name).join(", ") || "(none)");
+  log("  Archived tasks:", testArchivedTasks.length);
+  log("  Test projects:", testProjects.map((p) => p.name).join(", ") || "(none)");
   if (testProjects.length > 0) {
-    console.log(
+    log(
       "    with tasks:",
       testProjects
         .map((p) => `${p.name} (${p.tasks.map((t) => t.title).join(", ") || "empty"})`)
         .join("; "),
     );
   }
-  console.log("  Test org teams:", testOrgTeams.map((t) => t.name).join(", ") || "(none)");
-  console.log("  Notifications:", testNotifications.length);
+  log("  Test org teams:", testOrgTeams.map((t) => t.name).join(", ") || "(none)");
+  log("  Notifications:", testNotifications.length);
 
   if (dryRun) return;
 
   await prisma.$transaction(
     async (tx) => {
-    const testTaskIds = [...new Set([...testTasks.map((t) => t.id), ...projectTaskIds])];
-    if (testTaskIds.length > 0) {
-      await tx.taskUpdate.deleteMany({ where: { taskId: { in: testTaskIds } } });
-      await tx.taskOwner.deleteMany({ where: { taskId: { in: testTaskIds } } });
-      await tx.task.deleteMany({ where: { id: { in: testTaskIds } } });
-    }
+      if (testTaskIds.length > 0) {
+        await tx.taskUpdate.deleteMany({ where: { taskId: { in: testTaskIds } } });
+        await tx.taskOwner.deleteMany({ where: { taskId: { in: testTaskIds } } });
+        await tx.task.deleteMany({ where: { id: { in: testTaskIds } } });
+      }
 
-    if (allDeletedTasks.length > 0) {
-      await tx.deletedTask.deleteMany({ where: { workspaceId: workspace.id } });
-    }
+      if (allDeletedTasks.length > 0) {
+        await tx.deletedTask.deleteMany({ where: { workspaceId: workspace.id } });
+      }
 
-    if (testArchivedTasks.length > 0) {
-      await tx.archivedTask.deleteMany({
-        where: { archivedId: { in: testArchivedTasks.map((row) => row.archivedId) } },
-      });
-    }
+      if (testArchivedTasks.length > 0) {
+        await tx.archivedTask.deleteMany({
+          where: { archivedId: { in: testArchivedTasks.map((row) => row.archivedId) } },
+        });
+      }
 
-    const testScheduleIds = [
-      ...new Set([...testScheduleEvents.map((event) => event.id), ...projectScheduleIds]),
-    ];
-    if (testScheduleIds.length > 0) {
-      await tx.scheduleEventGuest.deleteMany({
-        where: { eventId: { in: testScheduleIds } },
-      });
-      await tx.scheduleEvent.deleteMany({ where: { id: { in: testScheduleIds } } });
-    }
+      if (testScheduleIds.length > 0) {
+        await tx.scheduleEventGuest.deleteMany({
+          where: { eventId: { in: testScheduleIds } },
+        });
+        await tx.scheduleEvent.deleteMany({ where: { id: { in: testScheduleIds } } });
+      }
 
-    if (testNotifications.length > 0) {
-      await tx.notification.deleteMany({
-        where: { id: { in: testNotifications.map((n) => n.id) } },
-      });
-    }
+      if (testNotifications.length > 0) {
+        await tx.notification.deleteMany({
+          where: { id: { in: testNotifications.map((n) => n.id) } },
+        });
+      }
 
-    for (const orgTeam of testOrgTeams) {
-      await tx.orgTeamMember.deleteMany({ where: { orgTeamId: orgTeam.id } });
-      await tx.orgTeam.delete({ where: { id: orgTeam.id } });
-    }
+      for (const orgTeam of testOrgTeams) {
+        await tx.orgTeamMember.deleteMany({ where: { orgTeamId: orgTeam.id } });
+        await tx.orgTeam.delete({ where: { id: orgTeam.id } });
+      }
 
-    for (const project of testProjects) {
-      await tx.projectMember.deleteMany({ where: { projectId: project.id } });
-      await tx.project.delete({ where: { id: project.id } });
-    }
+      for (const project of testProjects) {
+        await tx.projectMember.deleteMany({ where: { projectId: project.id } });
+        await tx.project.delete({ where: { id: project.id } });
+      }
 
-    for (const member of removableStaff) {
-      await tx.notification.deleteMany({
-        where: {
-          OR: [{ recipientId: member.id }, { actorStaffId: member.id }],
-        },
-      });
-      await tx.taskOwner.deleteMany({ where: { staffMemberId: member.id } });
-      await tx.taskUpdate.deleteMany({ where: { staffMemberId: member.id } });
-      await tx.projectMember.deleteMany({ where: { staffMemberId: member.id } });
-      await tx.orgTeamMember.deleteMany({ where: { staffMemberId: member.id } });
-      await tx.scheduleEventGuest.deleteMany({ where: { staffMemberId: member.id } });
-      await tx.staffMember.delete({ where: { id: member.id } });
-    }
+      for (const member of removableStaff) {
+        await tx.notification.deleteMany({
+          where: {
+            OR: [{ recipientId: member.id }, { actorStaffId: member.id }],
+          },
+        });
+        await tx.taskOwner.deleteMany({ where: { staffMemberId: member.id } });
+        await tx.taskUpdate.deleteMany({ where: { staffMemberId: member.id } });
+        await tx.projectMember.deleteMany({ where: { staffMemberId: member.id } });
+        await tx.orgTeamMember.deleteMany({ where: { staffMemberId: member.id } });
+        await tx.scheduleEventGuest.deleteMany({ where: { staffMemberId: member.id } });
+        await tx.staffMember.delete({ where: { id: member.id } });
+      }
 
-    for (const user of testUsers) {
-      await tx.refreshToken.deleteMany({ where: { userId: user.id } });
-      await tx.user.delete({ where: { id: user.id } });
-    }
+      for (const user of testUsers) {
+        await tx.refreshToken.deleteMany({ where: { userId: user.id } });
+        await tx.user.delete({ where: { id: user.id } });
+      }
     },
     { maxWait: 15000, timeout: 60000 },
   );
@@ -222,15 +237,24 @@ async function main() {
     payload: { reason: "test-data-cleanup" },
   });
 
-  console.log("\nCleanup complete. Workspace revision:", revision);
-  console.log("Protected users preserved:", [...PROTECTED_EMAILS].join(", "));
+  log("\nCleanup complete. Workspace revision:", revision);
+  log("Protected users preserved:", [...PROTECTED_EMAILS].join(", "));
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+async function main() {
+  const dryRun = process.argv.includes("--dry-run");
+  await cleanupTestData({ dryRun });
+}
+
+const isDirectRun = process.argv[1]?.replace(/\\/g, "/").endsWith("cleanup-test-data.ts");
+
+if (isDirectRun) {
+  main()
+    .catch((error) => {
+      console.error(error);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

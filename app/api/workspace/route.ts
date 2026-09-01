@@ -14,6 +14,7 @@ import { syncLegacyWorkspaceDataBySlug } from "@/src/lib/workspace/sync";
 import { assertWorkspaceData } from "@/src/lib/workspace/validate";
 import type { WorkspaceData } from "@/src/types/workspace";
 import { getActorClientId } from "@/src/lib/api/route-helpers";
+import { canSeeAllProjects } from "@/src/lib/workspace/visibility";
 
 function parseWorkspaceBody(value: unknown): WorkspaceData {
   assertWorkspaceData(value);
@@ -26,7 +27,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const data = await getLegacyWorkspaceDataBySlug();
+  const viewer = {
+    staffMemberId: auth.staffMember.id,
+    permissionRole: auth.staffMember.permissionRole,
+  };
+  const data = await getLegacyWorkspaceDataBySlug(DEFAULT_WORKSPACE_SLUG, viewer);
 
   if (!data) {
     return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
@@ -49,6 +54,13 @@ export async function PUT(request: Request) {
   const { auth, payload, hadValidAccess } = await resolveAuthSession();
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!canSeeAllProjects(auth.staffMember.permissionRole)) {
+    return NextResponse.json(
+      { error: "Bulk workspace sync is restricted to administrators." },
+      { status: 403 },
+    );
   }
 
   let incoming: WorkspaceData;

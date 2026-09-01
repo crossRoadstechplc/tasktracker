@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AuthUserResponse } from "@/src/lib/auth/types";
 import type { WorkspaceData } from "@/src/types/workspace";
 import { TRACKER_SHELL_HTML } from "@/src/tracker/tracker-shell";
+import { PageLoader } from "@/src/components/PageLoader";
 
 type LoadState =
   | { status: "loading" }
@@ -105,18 +106,7 @@ export function TrackerApp() {
   }, [loadState]);
 
   if (loadState.status === "loading") {
-    return (
-      <div className="app-shell">
-        <div className="app-content">
-          <header className="main-header">
-            <div className="brand">
-              <h1>Company Task Tracker</h1>
-              <p>Loading workspace…</p>
-            </div>
-          </header>
-        </div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (loadState.status === "error") {

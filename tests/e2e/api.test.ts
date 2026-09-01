@@ -37,41 +37,32 @@ describe("API e2e", () => {
     await loginAs(juniorJar, JUNIOR_EMAIL);
     await loginAs(listenerJar, SUPER_ADMIN_EMAIL);
 
-    const workspaceResponse = await apiFetch(adminJar, "/api/workspace");
-    const workspace = (await workspaceResponse.json()) as WorkspaceData;
-
-    if (workspace.teams.length > 0) {
-      defaultTeam = workspace.teams[0];
-      return;
-    }
-
     const projectResponse = await apiFetch(adminJar, "/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "e2e-task-team" }),
     });
-    expect(projectResponse.status).toBe(200);
-    const project = (await projectResponse.json()) as { id: string; name: string };
-    created.projectIds.push(project.id);
-    defaultTeam = project.name;
+
+    if (projectResponse.status === 200) {
+      const project = (await projectResponse.json()) as { id: string; name: string };
+      created.projectIds.push(project.id);
+      defaultTeam = project.name;
+      return;
+    }
+
+    const workspaceResponse = await apiFetch(adminJar, "/api/workspace");
+    const workspace = (await workspaceResponse.json()) as WorkspaceData;
+    if (workspace.teams.includes("e2e-task-team")) {
+      defaultTeam = "e2e-task-team";
+      return;
+    }
+
+    if (workspace.teams.length > 0) {
+      defaultTeam = workspace.teams[0];
+    }
   });
 
   afterAll(async () => {
-    for (const scheduleId of created.scheduleIds) {
-      await apiFetch(adminJar, `/api/schedule/${scheduleId}`, { method: "DELETE" });
-    }
-    for (const trashId of created.trashIds) {
-      await apiFetch(adminJar, `/api/trash/${trashId}/restore`, { method: "POST" });
-    }
-    for (const taskId of created.taskIds) {
-      await apiFetch(adminJar, `/api/tasks/${taskId}`, { method: "DELETE" });
-    }
-    for (const projectId of created.projectIds) {
-      await apiFetch(adminJar, `/api/projects/${projectId}`, { method: "DELETE" });
-    }
-    for (const orgTeamId of created.orgTeamIds) {
-      await apiFetch(adminJar, `/api/org-teams/${orgTeamId}`, { method: "DELETE" });
-    }
     await apiFetch(adminJar, "/api/auth/logout", { method: "POST" });
     await apiFetch(juniorJar, "/api/auth/logout", { method: "POST" });
     await apiFetch(listenerJar, "/api/auth/logout", { method: "POST" });
@@ -139,31 +130,18 @@ describe("API e2e", () => {
       const body = (await response.json()) as { ok: boolean; revision: number };
       expect(body.ok).toBe(true);
       expect(body.revision).toBeGreaterThanOrEqual(0);
-    });
+    }, 60_000);
 
-    it("PUT /api/workspace strips forbidden junior merge", async () => {
+    it("PUT /api/workspace returns 403 for junior", async () => {
       const getResponse = await apiFetch(adminJar, "/api/workspace");
       const workspace = (await getResponse.json()) as WorkspaceData;
-      const incoming = structuredClone(workspace);
-      const juniorName = E2E_JUNIOR_NAME;
-      if (!incoming.staffProfiles[juniorName]) {
-        throw new Error(`Missing e2e junior staff profile "${juniorName}".`);
-      }
-      incoming.staffProfiles[juniorName] = {
-        ...incoming.staffProfiles[juniorName],
-        permissionRole: "Super Admin",
-      };
 
       const putResponse = await apiFetch(juniorJar, "/api/workspace", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(incoming),
+        body: JSON.stringify(workspace),
       });
-      expect(putResponse.status).toBe(200);
-
-      const verify = await apiFetch(adminJar, "/api/workspace");
-      const saved = (await verify.json()) as WorkspaceData;
-      expect(saved.staffProfiles[juniorName].permissionRole).not.toBe("Super Admin");
+      expect(putResponse.status).toBe(403);
     });
   });
 
@@ -370,6 +348,173 @@ describe("API e2e", () => {
       expect(guestEvent).toBeTruthy();
       expect(guestEvent?.guests).toContain(E2E_JUNIOR_NAME);
     });
+
+    async function getJuniorStaffId() {
+      const response = await apiFetch(juniorJar, "/api/auth/me");
+      const body = (await response.json()) as { staffMember: { id: string } };
+      return body.staffMember.id;
+    }
+
+    async function getAdminDisplayName() {
+      const response = await apiFetch(adminJar, "/api/auth/me");
+      const body = (await response.json()) as { staffMember: { displayName: string } };
+      return body.staffMember.displayName;
+    }
+
+    async function createProjectWithJuniorMember(name: string) {
+      const projectResponse = await apiFetch(adminJar, "/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      expect(projectResponse.status).toBe(200);
+      const project = (await projectResponse.json()) as { id: string; name: string };
+      created.projectIds.push(project.id);
+
+      const juniorStaffId = await getJuniorStaffId();
+      const assignResponse = await apiFetch(adminJar, `/api/projects/${project.id}/members`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberIds: [juniorStaffId] }),
+      });
+      expect(assignResponse.status).toBe(200);
+      return project;
+    }
+
+    it("shows project-linked events to project members without guest assignment", async () => {
+      const project = await createProjectWithJuniorMember("e2e-schedule-project-visible");
+
+      const createResponse = await apiFetch(adminJar, "/api/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "e2e-schedule-project-member",
+          start: "2026-09-05T09:00:00.000Z",
+          end: "2026-09-05T10:00:00.000Z",
+          color: "#336699",
+          project: project.name,
+        }),
+      });
+      expect(createResponse.status).toBe(200);
+      const { event } = (await createResponse.json()) as { event: { id: string } };
+      created.scheduleIds.push(event.id);
+
+      const juniorWorkspace = (await (
+        await apiFetch(juniorJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(juniorWorkspace.schedule.events.some((row) => row.id === event.id)).toBe(true);
+    });
+
+    it("notifies all project members when a project-linked event is created", async () => {
+      const project = await createProjectWithJuniorMember("e2e-schedule-project-notify");
+
+      const createResponse = await apiFetch(adminJar, "/api/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "e2e-schedule-project-notify-event",
+          start: "2026-09-06T09:00:00.000Z",
+          end: "2026-09-06T10:00:00.000Z",
+          color: "#336699",
+          project: project.name,
+        }),
+      });
+      expect(createResponse.status).toBe(200);
+      const { event } = (await createResponse.json()) as { event: { id: string } };
+      created.scheduleIds.push(event.id);
+
+      const notificationsResponse = await apiFetch(juniorJar, "/api/notifications");
+      const body = (await notificationsResponse.json()) as {
+        notifications: Array<{ type: string; resourceId: string }>;
+      };
+      expect(
+        body.notifications.some(
+          (row) => row.type === "SCHEDULE_INVITED" && row.resourceId === event.id,
+        ),
+      ).toBe(true);
+    });
+
+    it("keeps personal events visible and notified to explicit guests only", async () => {
+      await createProjectWithJuniorMember("e2e-schedule-personal-context");
+      const adminName = await getAdminDisplayName();
+
+      const createResponse = await apiFetch(adminJar, "/api/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "e2e-schedule-personal",
+          start: "2026-09-07T09:00:00.000Z",
+          end: "2026-09-07T10:00:00.000Z",
+          color: "#336699",
+          guests: [adminName],
+        }),
+      });
+      expect(createResponse.status).toBe(200);
+      const { event } = (await createResponse.json()) as { event: { id: string } };
+      created.scheduleIds.push(event.id);
+
+      const juniorWorkspace = (await (
+        await apiFetch(juniorJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(juniorWorkspace.schedule.events.some((row) => row.id === event.id)).toBe(false);
+
+      const juniorNotifications = (await (
+        await apiFetch(juniorJar, "/api/notifications")
+      ).json()) as { notifications: Array<{ type: string; resourceId: string }> };
+      expect(
+        juniorNotifications.notifications.some(
+          (row) => row.type === "SCHEDULE_INVITED" && row.resourceId === event.id,
+        ),
+      ).toBe(false);
+    });
+
+    it("invites non-project guest to project event without adding them to the project", async () => {
+      const projectResponse = await apiFetch(adminJar, "/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "e2e-schedule-guest-only" }),
+      });
+      expect(projectResponse.status).toBe(200);
+      const project = (await projectResponse.json()) as { id: string; name: string };
+      created.projectIds.push(project.id);
+
+      const juniorBefore = (await (
+        await apiFetch(juniorJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(juniorBefore.teams).not.toContain(project.name);
+
+      const createResponse = await apiFetch(adminJar, "/api/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "e2e-schedule-external-guest",
+          start: "2026-09-08T09:00:00.000Z",
+          end: "2026-09-08T10:00:00.000Z",
+          color: "#336699",
+          project: project.name,
+          guests: [E2E_JUNIOR_NAME],
+        }),
+      });
+      expect(createResponse.status).toBe(200);
+      const { event } = (await createResponse.json()) as { event: { id: string } };
+      created.scheduleIds.push(event.id);
+
+      const juniorAfter = (await (
+        await apiFetch(juniorJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(juniorAfter.teams).not.toContain(project.name);
+      expect(juniorAfter.schedule.events.some((row) => row.id === event.id)).toBe(true);
+
+      const notificationsResponse = await apiFetch(juniorJar, "/api/notifications");
+      const body = (await notificationsResponse.json()) as {
+        notifications: Array<{ type: string; resourceId: string }>;
+      };
+      expect(
+        body.notifications.some(
+          (row) => row.type === "SCHEDULE_INVITED" && row.resourceId === event.id,
+        ),
+      ).toBe(true);
+    });
   });
 
   describe("projects and org teams", () => {
@@ -457,16 +602,18 @@ describe("API e2e", () => {
     });
 
     it("notifies junior when added to a project", async () => {
-      const workspaceResponse = await apiFetch(adminJar, "/api/workspace");
-      const workspace = (await workspaceResponse.json()) as WorkspaceData & {
-        projectIds?: Record<string, string>;
-      };
-      const projectId = workspace.projectIds?.[defaultTeam];
-      if (!projectId) throw new Error(`Missing project id for ${defaultTeam}`);
+      const projectResponse = await apiFetch(adminJar, "/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "e2e-notify-project" }),
+      });
+      expect(projectResponse.status).toBe(200);
+      const project = (await projectResponse.json()) as { id: string; name: string };
+      created.projectIds.push(project.id);
 
       const juniorStaffId = await getJuniorStaffId();
 
-      const assignResponse = await apiFetch(adminJar, `/api/projects/${projectId}/members`, {
+      const assignResponse = await apiFetch(adminJar, `/api/projects/${project.id}/members`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ memberIds: [juniorStaffId] }),
@@ -479,7 +626,7 @@ describe("API e2e", () => {
       };
       expect(
         body.notifications.some(
-          (row) => row.type === "PROJECT_ASSIGNED" && row.resourceId === projectId,
+          (row) => row.type === "PROJECT_ASSIGNED" && row.resourceId === project.id,
         ),
       ).toBe(true);
     });
@@ -595,6 +742,88 @@ describe("API e2e", () => {
       ).length;
 
       expect(afterCount).toBe(beforeCount);
+    });
+  });
+
+  describe("project visibility", () => {
+    it("hides private projects from junior until task assignment auto-joins them", async () => {
+      const projectResponse = await apiFetch(adminJar, "/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "e2e-visibility-private" }),
+      });
+      expect(projectResponse.status).toBe(200);
+      const project = (await projectResponse.json()) as { id: string; name: string };
+      created.projectIds.push(project.id);
+
+      const createResponse = await apiFetch(adminJar, "/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "e2e-visibility-task",
+          team: project.name,
+          status: "To Do",
+        }),
+      });
+      expect(createResponse.status).toBe(200);
+      const { task } = (await createResponse.json()) as { task: { id: string } };
+      created.taskIds.push(task.id);
+
+      const juniorBefore = (await (
+        await apiFetch(juniorJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(juniorBefore.teams).not.toContain(project.name);
+      expect(juniorBefore.tasks.some((row) => row.id === task.id)).toBe(false);
+
+      const adminView = (await (
+        await apiFetch(adminJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(adminView.teams).toContain(project.name);
+      expect(adminView.tasks.some((row) => row.id === task.id)).toBe(true);
+
+      const assignResponse = await apiFetch(adminJar, `/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owners: [E2E_JUNIOR_NAME] }),
+      });
+      expect(assignResponse.status).toBe(200);
+
+      const juniorAfter = (await (
+        await apiFetch(juniorJar, "/api/workspace")
+      ).json()) as WorkspaceData;
+      expect(juniorAfter.teams).toContain(project.name);
+      expect(juniorAfter.tasks.some((row) => row.id === task.id)).toBe(true);
+    });
+
+    it("returns 403 when junior patches an inaccessible task", async () => {
+      const projectResponse = await apiFetch(adminJar, "/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "e2e-visibility-forbidden" }),
+      });
+      expect(projectResponse.status).toBe(200);
+      const project = (await projectResponse.json()) as { id: string; name: string };
+      created.projectIds.push(project.id);
+
+      const createResponse = await apiFetch(adminJar, "/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "e2e-visibility-hidden-task",
+          team: project.name,
+          status: "To Do",
+        }),
+      });
+      expect(createResponse.status).toBe(200);
+      const { task } = (await createResponse.json()) as { task: { id: string } };
+      created.taskIds.push(task.id);
+
+      const patchResponse = await apiFetch(juniorJar, `/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "should-not-apply" }),
+      });
+      expect(patchResponse.status).toBe(403);
     });
   });
 

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PageLoader } from "@/src/components/PageLoader";
 
 function EyeIcon({ visible }: { visible: boolean }) {
   if (visible) {
@@ -95,9 +96,12 @@ export function LoginForm() {
       const message =
         submitError instanceof Error ? submitError.message : "Could not sign in.";
       setError(message);
-    } finally {
       setLoading(false);
     }
+  }
+
+  if (loading) {
+    return <PageLoader />;
   }
 
   return (

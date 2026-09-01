@@ -716,6 +716,40 @@
     }
 
     /* ChatGPT-inspired application shell */
+    .page-loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      width: 100%;
+      min-height: 100vh;
+      background: #ffffff;
+    }
+
+    .page-loader-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #e8eaed;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: page-loader-spin 0.75s linear infinite;
+    }
+
+    .page-loader-label {
+      margin: 0;
+      color: #5f6368;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    @keyframes page-loader-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
     .app-shell {
       display: flex;
       width: 100%;
@@ -1704,6 +1738,61 @@
       background: #ffffff;
     }
 
+    .schedule-date-input-row {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+    }
+
+    .schedule-date-input-row input[type="text"] {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .schedule-date-picker-btn {
+      display: grid;
+      place-items: center;
+      flex: 0 0 36px;
+      width: 36px;
+      height: 36px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #5f6368;
+      cursor: pointer;
+      line-height: 0;
+    }
+
+    .schedule-date-picker-btn svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+
+    .schedule-date-picker-btn:hover:not(:disabled) {
+      background: #f8f9fa;
+      color: #202124;
+    }
+
+    .schedule-date-picker-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .schedule-date-picker-native {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .schedule-field textarea {
       resize: vertical;
       min-height: 72px;
@@ -1729,6 +1818,59 @@
 
     .schedule-check-field input {
       width: auto;
+    }
+
+    .schedule-form-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .schedule-field-helper {
+      margin: -4px 0 0;
+      color: #5f6368;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .schedule-project-team-preview {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f8f9fa;
+      border: 1px solid #e0e3e7;
+    }
+
+    .schedule-project-team-label {
+      display: block;
+      margin-bottom: 6px;
+      color: #5f6368;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .schedule-project-team-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .schedule-project-team-list li {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #dadce0;
+      color: #3c4043;
+      font-size: 12px;
+    }
+
+    .schedule-guest-chip.not-in-project {
+      background: #fef7e0;
+      color: #b06000;
     }
 
     .schedule-guest-dropdown {

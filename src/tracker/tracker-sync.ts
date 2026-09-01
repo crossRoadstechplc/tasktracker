@@ -17,6 +17,7 @@ export type TrackerSyncContext = {
   setBackupStatus: (message: string, isError?: boolean) => void;
   onNotificationCreated?: (notification: Record<string, unknown>) => void;
   refreshNotifications?: () => void | Promise<void>;
+  canSeeAllProjects?: boolean;
 };
 
 type TaskLike = {
@@ -45,7 +46,24 @@ type ScheduleEventLike = {
   guests?: string[];
 };
 
+const VISIBILITY_SENSITIVE_EVENTS = new Set([
+  "task.created",
+  "task.updated",
+  "task.moved",
+  "task.deleted",
+  "task.archived",
+  "task.restored",
+  "task.update.added",
+  "schedule.created",
+  "schedule.updated",
+  "schedule.deleted",
+  "project.created",
+  "project.updated",
+  "project.deleted",
+]);
+
 export function createTrackerSync(ctx: TrackerSyncContext) {
+  const canSeeAllProjects = ctx.canSeeAllProjects ?? true;
   const clientId = crypto.randomUUID();
   let workspaceRevision = 0;
   let eventSource: EventSource | null = null;
@@ -513,6 +531,12 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
     }
 
     if (isSelfEvent(payload.actorClientId)) return;
+
+    if (!canSeeAllProjects && VISIBILITY_SENSITIVE_EVENTS.has(type)) {
+      void reloadWorkspace();
+      scheduleNotificationRefresh();
+      return;
+    }
 
     switch (type) {
       case "task.created":

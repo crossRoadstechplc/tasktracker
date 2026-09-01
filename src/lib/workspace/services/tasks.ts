@@ -18,11 +18,28 @@ import {
   getNewAssigneeIds,
   resolveActorStaffId,
 } from "@/src/lib/notifications/service";
+import {
+  assertProjectAccess,
+  assertTaskAccess,
+  assertTrashAccess,
+  ensureProjectMembers,
+} from "@/src/lib/workspace/visibility";
+
+import type { PermissionRoleLabel } from "@/src/types/workspace";
 
 export type ActorContext = {
   userId: string;
   clientId?: string | null;
+  staffMemberId: string;
+  permissionRole: PermissionRoleLabel;
 };
+
+export function viewerFromActor(actor: ActorContext) {
+  return {
+    staffMemberId: actor.staffMemberId,
+    permissionRole: actor.permissionRole,
+  };
+}
 
 function normalizeOwners(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -49,13 +66,21 @@ export async function createTask(input: {
   owners?: string[];
 }): Promise<{ task: LegacyTask; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  const viewer = viewerFromActor(input.actor);
   const projectId = await getProjectIdByName(workspace.id, input.team);
   if (!projectId) {
     throw new Error(`Unknown project "${input.team}".`);
   }
 
+  await assertProjectAccess(workspace.id, projectId, viewer);
+
   const { nameToId } = await buildStaffDisplayNameMap(workspace.id);
   const owners = normalizeOwners(input.owners ?? []);
+  const ownerIds = owners
+    .map((name) => nameToId.get(name))
+    .filter((id): id is string => Boolean(id));
+  await ensureProjectMembers(projectId, ownerIds);
+
   const taskId = randomUUID();
 
   const maxSort = await prisma.task.aggregate({
@@ -100,9 +125,6 @@ export async function createTask(input: {
   });
 
   const actorStaffId = await resolveActorStaffId(workspace.id, input.actor.userId);
-  const ownerIds = owners
-    .map((name) => nameToId.get(name))
-    .filter((id): id is string => Boolean(id));
   const recipientIds = getNewAssigneeIds(new Set(), ownerIds, actorStaffId);
   await createAssignmentNotifications({
     workspaceId: workspace.id,
@@ -130,16 +152,20 @@ export async function updateTask(input: {
   owners?: string[];
 }): Promise<{ task: LegacyTask; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  const viewer = viewerFromActor(input.actor);
   const existing = await prisma.task.findFirst({
     where: { id: input.taskId, workspaceId: workspace.id },
     include: { owners: true },
   });
   if (!existing) throw new Error("Task not found.");
 
+  await assertTaskAccess(workspace.id, input.taskId, viewer);
+
   let projectId = existing.projectId;
   if (input.team) {
     const nextProjectId = await getProjectIdByName(workspace.id, input.team);
     if (!nextProjectId) throw new Error(`Unknown project "${input.team}".`);
+    await assertProjectAccess(workspace.id, nextProjectId, viewer);
     projectId = nextProjectId;
   }
 
@@ -175,6 +201,10 @@ export async function updateTask(input: {
       }
     }
   });
+
+  if (nextOwnerIds) {
+    await ensureProjectMembers(projectId, nextOwnerIds);
+  }
 
   const task = await loadTaskLegacy(input.taskId, workspace.id);
   if (!task) throw new Error("Could not load updated task.");
@@ -215,6 +245,7 @@ export async function moveTask(input: {
   sortOrder?: number;
 }): Promise<{ task: LegacyTask; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  await assertTaskAccess(workspace.id, input.taskId, viewerFromActor(input.actor));
   const existing = await prisma.task.findFirst({
     where: { id: input.taskId, workspaceId: workspace.id },
   });
@@ -258,6 +289,7 @@ export async function addTaskUpdate(input: {
   staffMemberId?: string | null;
 }): Promise<{ task: LegacyTask; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  await assertTaskAccess(workspace.id, input.taskId, viewerFromActor(input.actor));
   const existing = await prisma.task.findFirst({
     where: { id: input.taskId, workspaceId: workspace.id },
   });
@@ -295,6 +327,7 @@ export async function deleteTask(input: {
   taskId: string;
 }): Promise<{ trashId: string; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  await assertTaskAccess(workspace.id, input.taskId, viewerFromActor(input.actor));
   const task = await loadTaskLegacy(input.taskId, workspace.id);
   if (!task) throw new Error("Task not found.");
 
@@ -339,6 +372,7 @@ export async function archiveTask(input: {
   taskId: string;
 }): Promise<{ archivedId: string; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  await assertTaskAccess(workspace.id, input.taskId, viewerFromActor(input.actor));
   const task = await loadTaskLegacy(input.taskId, workspace.id);
   if (!task) throw new Error("Task not found.");
 
@@ -381,6 +415,7 @@ export async function restoreTrashTask(input: {
   trashId: string;
 }): Promise<{ task: LegacyTask; revision: number }> {
   const workspace = await getDefaultWorkspace();
+  await assertTrashAccess(workspace.id, input.trashId, viewerFromActor(input.actor));
   const entry = await prisma.deletedTask.findFirst({
     where: { trashId: input.trashId, workspaceId: workspace.id },
   });
@@ -397,6 +432,11 @@ export async function restoreTrashTask(input: {
   if (!projectId) throw new Error(`Unknown project "${payload.team}".`);
 
   const owners = normalizeOwners(payload.owners ?? payload.owner);
+  const ownerIds = owners
+    .map((name) => nameToId.get(name))
+    .filter((id): id is string => Boolean(id));
+  await ensureProjectMembers(projectId, ownerIds);
+
   const taskId = payload.id || randomUUID();
   const status = TASK_STATUS_TO_DB[toTaskStatusLabel(payload.previousStatus ?? payload.status)];
 

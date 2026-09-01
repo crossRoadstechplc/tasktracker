@@ -62,7 +62,7 @@ export function buildInviteEmailContent(input: {
             <tr>
               <td style="padding:24px 28px 8px 28px;">
                 <h1 style="margin:0 0 8px 0;font-size:20px;line-height:1.3;">Company Task Tracker</h1>
-                <p style="margin:0;color:#555555;font-size:14px;">Workforce invite</p>
+                <p style="margin:0;color:#555555;font-size:14px;">Task Tracker invite</p>
               </td>
             </tr>
             <tr>

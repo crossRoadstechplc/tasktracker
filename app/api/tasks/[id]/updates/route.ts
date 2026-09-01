@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission, requireSession } from "@/src/lib/api/guard";
 import { jsonWithSession, workspaceRevisionHeaders } from "@/src/lib/api/response";
-import { getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
+import { actorFromAuth, getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
 import { addTaskUpdate } from "@/src/lib/workspace/services/tasks";
 
 const updateSchema = z.object({
@@ -34,7 +34,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const result = await addTaskUpdate({
-      actor: { userId: session.auth.user.id, clientId: getActorClientId(request) },
+      actor: actorFromAuth(session.auth, getActorClientId(request)),
       taskId: id,
       text: parsed.data.text,
       staffMemberId: session.auth.staffMember.id,
