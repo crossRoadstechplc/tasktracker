@@ -18,6 +18,7 @@ export type TrackerSyncContext = {
   onNotificationCreated?: (notification: Record<string, unknown>) => void;
   refreshNotifications?: () => void | Promise<void>;
   canSeeAllProjects?: boolean;
+  clientId?: string;
 };
 
 type TaskLike = {
@@ -64,7 +65,7 @@ const VISIBILITY_SENSITIVE_EVENTS = new Set([
 
 export function createTrackerSync(ctx: TrackerSyncContext) {
   const canSeeAllProjects = ctx.canSeeAllProjects ?? true;
-  const clientId = crypto.randomUUID();
+  const clientId = ctx.clientId ?? crypto.randomUUID();
   let workspaceRevision = 0;
   let eventSource: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -469,25 +470,45 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
   }
 
   async function reloadWorkspace() {
+    console.log("[project-config]", {
+      layer: "tracker-sync",
+      step: "reloadWorkspace-start",
+    });
     try {
       const response = await fetch("/api/workspace", {
         credentials: "include",
         cache: "no-store",
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.log("[project-config]", {
+          layer: "tracker-sync",
+          step: "reloadWorkspace-abort",
+          status: response.status,
+        });
+        return;
+      }
       const revisionHeader = response.headers.get("X-Workspace-Revision");
       if (revisionHeader) {
         const parsed = Number.parseInt(revisionHeader, 10);
         if (Number.isFinite(parsed)) workspaceRevision = parsed;
       }
       const data = await response.json();
+      console.log("[project-config]", {
+        layer: "tracker-sync",
+        step: "reloadWorkspace-apply",
+        revision: workspaceRevision,
+      });
       ctx.applyWorkspaceData(data);
       snapshotKnownIds();
       ctx.render();
       ctx.renderTrash();
       ctx.renderScheduleView({ preserveScroll: true });
+      console.log("[project-config]", {
+        layer: "tracker-sync",
+        step: "reloadWorkspace-done",
+      });
     } catch (error) {
-      console.error("Workspace reload failed.", error);
+      console.error("[project-config] reloadWorkspace failed", error);
     }
   }
 
@@ -523,6 +544,23 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
     const type = payload.type ?? event.type;
     const data = payload.payload as Record<string, unknown> | undefined;
 
+    if (
+      type === "project.created" ||
+      type === "project.updated" ||
+      type === "project.deleted"
+    ) {
+      const selfEvent = isSelfEvent(payload.actorClientId);
+      console.log("[project-config]", {
+        layer: "tracker-sync",
+        step: "sse-project-event",
+        type,
+        actorClientId: payload.actorClientId,
+        trackerClientId: clientId,
+        treatedAsSelf: selfEvent,
+        resourceId: payload.resourceId,
+      });
+    }
+
     if (type === "notification.created") {
       if (data && typeof data === "object" && "recipientId" in data) {
         ctx.onNotificationCreated?.(data);
@@ -533,6 +571,12 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
     if (isSelfEvent(payload.actorClientId)) return;
 
     if (!canSeeAllProjects && VISIBILITY_SENSITIVE_EVENTS.has(type)) {
+      console.log("[project-config]", {
+        layer: "tracker-sync",
+        step: "reloadWorkspace-trigger",
+        reason: "visibility-sensitive-event",
+        type,
+      });
       void reloadWorkspace();
       scheduleNotificationRefresh();
       return;
@@ -611,6 +655,12 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
       case "project.created":
       case "project.updated":
       case "project.deleted":
+        console.log("[project-config]", {
+          layer: "tracker-sync",
+          step: "reloadWorkspace-trigger",
+          reason: "project-event",
+          type,
+        });
         void reloadWorkspace();
         scheduleNotificationRefresh();
         break;
@@ -687,6 +737,12 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
 
   function init(initialRevision = 0) {
     workspaceRevision = initialRevision;
+    console.log("[project-config]", {
+      layer: "tracker-sync",
+      step: "init",
+      clientId,
+      initialRevision,
+    });
     snapshotKnownIds();
     connectEvents();
 

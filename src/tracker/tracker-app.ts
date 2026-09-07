@@ -421,6 +421,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function refreshPermissionsUi(options = {}) {
         const skipSettings = options.skipSettings === true;
+        console.log("[project-config]", {
+          layer: "ui",
+          step: "refreshPermissionsUi",
+          skipSettings,
+          projectsViewActive: teamsView.classList.contains("active"),
+        });
         applyPermissionGating();
         updateSidebarBrandMark();
         render();
@@ -3299,6 +3305,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function renderTeamManager() {
+        if (teamsView.classList.contains("active")) {
+          console.log("[project-config]", {
+            layer: "ui",
+            step: "renderTeamManager",
+            note: "full project list rebuild — open configure panels will close",
+          });
+        }
         teamManagerList.innerHTML = "";
         teamManagerList.classList.add("team-table");
 
@@ -3350,6 +3363,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           saveBtn.className = "save-team-btn project-config-save";
           saveBtn.textContent = "Save";
           saveBtn.hidden = true;
+          saveBtn.disabled = true;
+
+          const cancelBtn = document.createElement("button");
+          cancelBtn.type = "button";
+          cancelBtn.className = "btn-secondary project-config-cancel";
+          cancelBtn.textContent = "Cancel";
+          cancelBtn.hidden = true;
 
           const membersBtn = document.createElement("button");
           membersBtn.type = "button";
@@ -3374,6 +3394,55 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           function showProjectRowFeedback(message) {
             rowFeedback.textContent = message;
             rowFeedback.classList.add("visible");
+          }
+
+          let savedMembers = [...(teamMembers[team] || [])];
+          let savedLeader = teamLeaders[team] || "";
+          let draftMembers = [...savedMembers];
+          let draftLeader = savedLeader;
+
+          function projectMemberListsEqual(a, b) {
+            if (a.length !== b.length) return false;
+            const setB = new Set(b);
+            return a.every(name => setB.has(name));
+          }
+
+          function isProjectConfigDirty() {
+            return !projectMemberListsEqual(draftMembers, savedMembers) ||
+              draftLeader !== savedLeader;
+          }
+
+          function updateProjectSaveBtn() {
+            saveBtn.disabled = !isProjectConfigDirty();
+          }
+
+          function logProjectConfig(step, detail = {}) {
+            console.log("[project-config]", {
+              layer: "ui",
+              project: team,
+              projectId: projectIds[team] || null,
+              step,
+              panelOpen: !membersPanel.hidden,
+              dirty: isProjectConfigDirty(),
+              draftMembers: [...draftMembers],
+              draftLeader,
+              savedMembers: [...savedMembers],
+              savedLeader,
+              ...detail,
+            });
+          }
+
+          function draftMembersForTeam() {
+            return staff.filter(name => draftMembers.includes(name));
+          }
+
+          function closeProjectConfigurePanel() {
+            logProjectConfig("close-panel");
+            membersPanel.hidden = true;
+            saveBtn.hidden = true;
+            cancelBtn.hidden = true;
+            membersBtn.hidden = false;
+            clearProjectRowFeedback();
           }
 
           saveBtn.addEventListener("click", async () => {
@@ -3443,33 +3512,53 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             if (!membersPanel.hidden) {
+              if (!isProjectConfigDirty()) {
+                logProjectConfig("save-click-ignored", { reason: "not-dirty" });
+                return;
+              }
+
+              logProjectConfig("save-click-start");
               clearProjectRowFeedback();
               saveBtn.disabled = true;
               saveBtn.textContent = "Saving…";
               try {
+                teamMembers[team] = [...draftMembers];
+                teamLeaders[team] = draftLeader;
+                saveTeamMembers();
+                saveTeamLeaders();
+                logProjectConfig("save-local-state-committed");
                 await settingsSync.flushProjectConfigSync(team);
+                savedMembers = [...draftMembers];
+                savedLeader = draftLeader;
+                memberCell.textContent = String(draftMembers.length);
+                logProjectConfig("save-success");
               } catch (error) {
-                console.error("Project config save failed.", error);
+                console.error("[project-config] save failed", { project: team, error });
+                teamMembers[team] = [...savedMembers];
+                teamLeaders[team] = savedLeader;
+                saveTeamMembers();
+                saveTeamLeaders();
+                logProjectConfig("save-error-reverted-local-state", {
+                  error: error instanceof Error ? error.message : String(error),
+                });
                 const message = error instanceof Error
                   ? error.message
                   : "Could not save project.";
-                saveBtn.disabled = false;
                 saveBtn.textContent = "Save";
+                updateProjectSaveBtn();
                 showProjectRowFeedback(message);
                 setBackupStatus(message, true);
                 return;
               }
-              saveBtn.disabled = false;
               saveBtn.textContent = "Save";
+              closeProjectConfigurePanel();
+              logProjectConfig("save-complete-before-render");
+              populateStaffFilter();
+              populateTeamFilter();
+              render();
+              logProjectConfig("save-complete-after-render");
+              return;
             }
-
-            membersPanel.hidden = true;
-            saveBtn.hidden = true;
-            membersBtn.hidden = false;
-            clearProjectRowFeedback();
-            populateStaffFilter();
-            populateTeamFilter();
-            render();
           });
 
           input.addEventListener("keydown", e => {
@@ -3501,7 +3590,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
               const checkbox = document.createElement("input");
               checkbox.type = "checkbox";
-              checkbox.checked = (teamMembers[team] || []).includes(staffName);
+              checkbox.dataset.staffName = staffName;
+              checkbox.checked = draftMembers.includes(staffName);
               checkbox.dataset.permission = "projects.manageMembers";
               checkbox.dataset.permissionMode = "disable";
 
@@ -3511,26 +3601,23 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   return;
                 }
                 clearProjectRowFeedback();
-                if (!teamMembers[team]) teamMembers[team] = [];
 
                 if (checkbox.checked) {
-                  if (!teamMembers[team].includes(staffName)) {
-                    teamMembers[team].push(staffName);
+                  if (!draftMembers.includes(staffName)) {
+                    draftMembers.push(staffName);
                   }
                 } else {
-                  teamMembers[team] = teamMembers[team].filter(member => member !== staffName);
+                  draftMembers = draftMembers.filter(member => member !== staffName);
+                  if (draftLeader === staffName) {
+                    draftLeader = "";
+                  }
                 }
 
-                if (!checkbox.checked && teamLeaders[team] === staffName) {
-                  teamLeaders[team] = "";
-                  saveTeamLeaders();
-                  settingsSync.scheduleProjectLeaderSync(team);
-                }
-
-                saveTeamMembers();
-                settingsSync.scheduleProjectMembersSync(team);
-                memberCell.textContent = String((teamMembers[team] || []).length);
                 refreshLeaderOptions();
+                logProjectConfig("member-toggle", {
+                  staffName,
+                  checked: checkbox.checked,
+                });
               });
 
               const profile = staffProfiles[staffName] || { role: "" };
@@ -3593,8 +3680,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           leaderSelect.dataset.permissionMode = "disable";
 
           function refreshLeaderOptions() {
-            const currentLeader = teamLeaders[team] || "";
-            const members = membersForTeam(team);
+            const members = draftMembersForTeam();
 
             leaderSelect.innerHTML = '<option value="">No project leader</option>';
 
@@ -3602,18 +3688,36 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               const option = document.createElement("option");
               option.value = memberName;
               option.textContent = staffTypeLabel(memberName);
-              option.selected = memberName === currentLeader;
               leaderSelect.appendChild(option);
             });
 
-            if (currentLeader && !members.includes(currentLeader)) {
-              teamLeaders[team] = "";
-              saveTeamLeaders();
-              settingsSync.scheduleProjectLeaderSync(team);
-              leaderSelect.value = "";
-            } else {
-              leaderSelect.value = currentLeader;
+            if (draftLeader && !members.includes(draftLeader)) {
+              draftLeader = "";
             }
+            leaderSelect.value = draftLeader;
+            updateProjectSaveBtn();
+          }
+
+          function syncProjectConfigureControlsFromDraft() {
+            memberOptions.querySelectorAll('input[type="checkbox"][data-staff-name]').forEach(checkbox => {
+              checkbox.checked = draftMembers.includes(checkbox.dataset.staffName);
+            });
+            refreshLeaderOptions();
+          }
+
+          function openProjectConfigurePanel() {
+            savedMembers = [...(teamMembers[team] || [])];
+            savedLeader = teamLeaders[team] || "";
+            draftMembers = [...savedMembers];
+            draftLeader = savedLeader;
+            syncProjectConfigureControlsFromDraft();
+            clearProjectRowFeedback();
+            membersPanel.hidden = false;
+            membersBtn.hidden = true;
+            saveBtn.hidden = false;
+            cancelBtn.hidden = false;
+            updateProjectSaveBtn();
+            logProjectConfig("open-panel");
           }
 
           refreshLeaderOptions();
@@ -3622,14 +3726,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             if (!can("projects.manageMembers")) return;
             clearProjectRowFeedback();
             const selectedLeader = leaderSelect.value;
-            const members = teamMembers[team] || [];
 
-            teamLeaders[team] = selectedLeader && members.includes(selectedLeader)
+            draftLeader = selectedLeader && draftMembers.includes(selectedLeader)
               ? selectedLeader
               : "";
 
-            saveTeamLeaders();
-            settingsSync.scheduleProjectLeaderSync(team);
+            updateProjectSaveBtn();
+            logProjectConfig("leader-change", { selectedLeader: draftLeader });
           });
 
           leaderRow.appendChild(leaderLabel);
@@ -3639,10 +3742,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           membersBtn.addEventListener("click", () => {
             if (!can("projects.manageMembers")) return;
-            clearProjectRowFeedback();
-            membersPanel.hidden = false;
-            membersBtn.hidden = true;
-            saveBtn.hidden = false;
+            openProjectConfigurePanel();
+          });
+
+          cancelBtn.addEventListener("click", () => {
+            logProjectConfig("cancel-click");
+            draftMembers = [...savedMembers];
+            draftLeader = savedLeader;
+            syncProjectConfigureControlsFromDraft();
+            closeProjectConfigurePanel();
           });
 
           const removeBtn = document.createElement("button");
@@ -3768,6 +3876,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           });
 
           actions.appendChild(saveBtn);
+          actions.appendChild(cancelBtn);
           actions.appendChild(membersBtn);
           actions.appendChild(removeBtn);
 
@@ -5577,6 +5686,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       populateCurrentUserSelect();
 
       function reloadWorkspaceState(data) {
+        console.log("[project-config]", {
+          layer: "ui",
+          step: "reloadWorkspaceState",
+          projectsViewActive: teamsView.classList.contains("active"),
+          willCallRefreshPermissionsUi: !permissionMatrixDirty,
+        });
         applyPreloadedWorkspace(data);
         tasks = readStoredJson(STORAGE_KEY, demoTasks, isRecordArray).map(task => taskWithOwners({
           ...task,
@@ -5675,7 +5790,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         });
       }
 
+      const trackerClientId = crypto.randomUUID();
+      console.log("[project-config]", {
+        layer: "ui",
+        step: "init-shared-client-id",
+        clientId: trackerClientId,
+      });
+
       trackerSync = createTrackerSync({
+        clientId: trackerClientId,
         getTasks: () => tasks,
         setTasks: nextTasks => {
           tasks = nextTasks;
@@ -5711,6 +5834,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       });
 
       settingsSync = createSettingsSync({
+        clientId: trackerClientId,
         getProjectIds: () => projectIds,
         setProjectIds: nextIds => {
           projectIds = nextIds;

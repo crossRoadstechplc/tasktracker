@@ -11,12 +11,25 @@ export type SettingsSyncContext = {
   getTeamLeaders: () => Record<string, string>;
   getOrgTeamMembers: () => Record<string, string[]>;
   setBackupStatus: (message: string, isError?: boolean) => void;
+  clientId?: string;
 };
 
 const SYNC_MS = 350;
 
+function logProjectConfigSync(
+  step: string,
+  detail: Record<string, unknown> = {},
+) {
+  console.log("[project-config]", {
+    layer: "settings-sync",
+    step,
+    ...detail,
+  });
+}
+
 export function createSettingsSync(ctx: SettingsSyncContext) {
-  const clientId = crypto.randomUUID();
+  const clientId = ctx.clientId ?? crypto.randomUUID();
+  logProjectConfigSync("init", { clientId });
   let projectMembersTimer: ReturnType<typeof setTimeout> | null = null;
   let projectLeaderTimer: ReturnType<typeof setTimeout> | null = null;
   let orgTeamMembersTimer: ReturnType<typeof setTimeout> | null = null;
@@ -29,6 +42,7 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     projectName: string,
     action: () => Promise<T>,
   ): Promise<T> {
+    logProjectConfigSync("members-lock-wait", { projectName });
     const previous = projectMembersSyncLocks.get(projectName) ?? Promise.resolve();
     let releaseLock!: () => void;
     const current = new Promise<void>((resolve) => {
@@ -38,10 +52,12 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     projectMembersSyncLocks.set(projectName, queued);
 
     await previous.catch(() => undefined);
+    logProjectConfigSync("members-lock-acquired", { projectName });
     try {
       return await action();
     } finally {
       releaseLock();
+      logProjectConfigSync("members-lock-released", { projectName });
       if (projectMembersSyncLocks.get(projectName) === queued) {
         projectMembersSyncLocks.delete(projectName);
       }
@@ -83,12 +99,18 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
   function assertProjectSyncReady(projectName: string) {
     const projectId = ctx.getProjectIds()[projectName];
     if (!projectId) {
+      logProjectConfigSync("assert-failed", { projectName, reason: "missing-project-id" });
       throw new Error("Could not save — project id missing. Refresh and try again.");
     }
 
     const memberNames = ctx.getTeamMembers()[projectName] ?? [];
     const unresolvedMembers = unresolvedStaffNames(memberNames);
     if (unresolvedMembers.length) {
+      logProjectConfigSync("assert-failed", {
+        projectName,
+        reason: "unresolved-members",
+        unresolvedMembers,
+      });
       const label = unresolvedMembers.join(", ");
       throw new Error(
         `Could not save — ${label} ${unresolvedMembers.length === 1 ? "is" : "are"} not fully invited yet.`,
@@ -97,11 +119,17 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
 
     const leaderName = ctx.getTeamLeaders()[projectName] ?? "";
     if (leaderName && !ctx.getStaffIds()[leaderName]) {
+      logProjectConfigSync("assert-failed", {
+        projectName,
+        reason: "unresolved-leader",
+        leaderName,
+      });
       throw new Error(
         `Could not save — project leader "${leaderName}" is not fully invited yet.`,
       );
     }
 
+    logProjectConfigSync("assert-ok", { projectName, projectId, memberNames, leaderName });
     return projectId;
   }
 
@@ -188,17 +216,26 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     options: { quiet?: boolean } = {},
   ) {
     return withProjectMembersSyncLock(projectName, async () => {
+      logProjectConfigSync("sync-members-start", { projectName, quiet: options.quiet });
       const projectId = assertProjectSyncReady(projectName);
       const memberNames = ctx.getTeamMembers()[projectName] ?? [];
+      const memberIds = staffIdsFromNames(memberNames);
+      logProjectConfigSync("sync-members-request", { projectName, projectId, memberNames, memberIds });
 
       const response = await apiFetch(`/api/projects/${projectId}/members`, {
         method: "PUT",
-        body: JSON.stringify({ memberIds: staffIdsFromNames(memberNames) }),
+        body: JSON.stringify({ memberIds }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
+        logProjectConfigSync("sync-members-failed", {
+          projectName,
+          status: response.status,
+          error: payload?.error,
+        });
         throw new Error(payload?.error || `Save project members failed (${response.status}).`);
       }
+      logProjectConfigSync("sync-members-success", { projectName, projectId });
       if (!options.quiet) {
         ctx.setBackupStatus("Project members saved.");
       }
@@ -209,10 +246,12 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     projectName: string,
     options: { quiet?: boolean } = {},
   ) {
+    logProjectConfigSync("sync-leader-start", { projectName, quiet: options.quiet });
     const projectId = assertProjectSyncReady(projectName);
     const leaderName = ctx.getTeamLeaders()[projectName] ?? "";
     const staffIds = ctx.getStaffIds();
     const leaderId = leaderName && staffIds[leaderName] ? staffIds[leaderName] : null;
+    logProjectConfigSync("sync-leader-request", { projectName, projectId, leaderName, leaderId });
 
     const response = await apiFetch(`/api/projects/${projectId}`, {
       method: "PATCH",
@@ -220,18 +259,26 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
+      logProjectConfigSync("sync-leader-failed", {
+        projectName,
+        status: response.status,
+        error: payload?.error,
+      });
       throw new Error(payload?.error || `Save project leader failed (${response.status}).`);
     }
+    logProjectConfigSync("sync-leader-success", { projectName, projectId });
     if (!options.quiet) {
       ctx.setBackupStatus("Project leader saved.");
     }
   }
 
   async function flushProjectConfigSync(projectName: string) {
+    logProjectConfigSync("flush-start", { projectName, clientId });
     cancelProjectMembersSync();
     cancelProjectLeaderSync();
     await syncProjectMembersNow(projectName, { quiet: true });
     await syncProjectLeaderNow(projectName, { quiet: true });
+    logProjectConfigSync("flush-success", { projectName });
     ctx.setBackupStatus("Project saved.");
   }
 

@@ -3316,8 +3316,20 @@
     }
 
     .team-manager .project-config-save[hidden],
+    .team-manager .project-config-cancel[hidden],
     .team-manager .project-configure-btn[hidden] {
       display: none !important;
+    }
+
+    .team-manager .project-config-save:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .team-manager .project-config-cancel {
+      padding: 5px 8px;
+      font-size: 11.67px;
+      white-space: nowrap;
     }
 
 
