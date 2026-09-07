@@ -23,6 +23,30 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
   let pendingProjectMembers: string | null = null;
   let pendingProjectLeader: string | null = null;
   let pendingOrgTeamMembers: string | null = null;
+  const projectMembersSyncLocks = new Map<string, Promise<void>>();
+
+  async function withProjectMembersSyncLock<T>(
+    projectName: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const previous = projectMembersSyncLocks.get(projectName) ?? Promise.resolve();
+    let releaseLock!: () => void;
+    const current = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const queued = previous.catch(() => undefined).then(() => current);
+    projectMembersSyncLocks.set(projectName, queued);
+
+    await previous.catch(() => undefined);
+    try {
+      return await action();
+    } finally {
+      releaseLock();
+      if (projectMembersSyncLocks.get(projectName) === queued) {
+        projectMembersSyncLocks.delete(projectName);
+      }
+    }
+  }
 
   async function apiFetch(path: string, init: RequestInit = {}) {
     const headers = new Headers(init.headers);
@@ -45,9 +69,56 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
 
   function staffIdsFromNames(names: string[]) {
     const staffIds = ctx.getStaffIds();
-    return names
+    const ids = names
       .map((name) => staffIds[name])
       .filter((id): id is string => Boolean(id));
+    return [...new Set(ids)];
+  }
+
+  function unresolvedStaffNames(names: string[]) {
+    const staffIds = ctx.getStaffIds();
+    return names.filter((name) => !staffIds[name]);
+  }
+
+  function assertProjectSyncReady(projectName: string) {
+    const projectId = ctx.getProjectIds()[projectName];
+    if (!projectId) {
+      throw new Error("Could not save — project id missing. Refresh and try again.");
+    }
+
+    const memberNames = ctx.getTeamMembers()[projectName] ?? [];
+    const unresolvedMembers = unresolvedStaffNames(memberNames);
+    if (unresolvedMembers.length) {
+      const label = unresolvedMembers.join(", ");
+      throw new Error(
+        `Could not save — ${label} ${unresolvedMembers.length === 1 ? "is" : "are"} not fully invited yet.`,
+      );
+    }
+
+    const leaderName = ctx.getTeamLeaders()[projectName] ?? "";
+    if (leaderName && !ctx.getStaffIds()[leaderName]) {
+      throw new Error(
+        `Could not save — project leader "${leaderName}" is not fully invited yet.`,
+      );
+    }
+
+    return projectId;
+  }
+
+  function cancelProjectMembersSync() {
+    if (projectMembersTimer) {
+      clearTimeout(projectMembersTimer);
+      projectMembersTimer = null;
+    }
+    pendingProjectMembers = null;
+  }
+
+  function cancelProjectLeaderSync() {
+    if (projectLeaderTimer) {
+      clearTimeout(projectLeaderTimer);
+      projectLeaderTimer = null;
+    }
+    pendingProjectLeader = null;
   }
 
   function renameIdKey(
@@ -112,26 +183,33 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     ctx.setBackupStatus("Project removed.");
   }
 
-  async function syncProjectMembersNow(projectName: string) {
-    const projectId = ctx.getProjectIds()[projectName];
-    if (!projectId) return;
+  async function syncProjectMembersNow(
+    projectName: string,
+    options: { quiet?: boolean } = {},
+  ) {
+    return withProjectMembersSyncLock(projectName, async () => {
+      const projectId = assertProjectSyncReady(projectName);
+      const memberNames = ctx.getTeamMembers()[projectName] ?? [];
 
-    const memberNames = ctx.getTeamMembers()[projectName] ?? [];
-    const response = await apiFetch(`/api/projects/${projectId}/members`, {
-      method: "PUT",
-      body: JSON.stringify({ memberIds: staffIdsFromNames(memberNames) }),
+      const response = await apiFetch(`/api/projects/${projectId}/members`, {
+        method: "PUT",
+        body: JSON.stringify({ memberIds: staffIdsFromNames(memberNames) }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || `Save project members failed (${response.status}).`);
+      }
+      if (!options.quiet) {
+        ctx.setBackupStatus("Project members saved.");
+      }
     });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.error || `Save project members failed (${response.status}).`);
-    }
-    ctx.setBackupStatus("Project members saved.");
   }
 
-  async function syncProjectLeaderNow(projectName: string) {
-    const projectId = ctx.getProjectIds()[projectName];
-    if (!projectId) return;
-
+  async function syncProjectLeaderNow(
+    projectName: string,
+    options: { quiet?: boolean } = {},
+  ) {
+    const projectId = assertProjectSyncReady(projectName);
     const leaderName = ctx.getTeamLeaders()[projectName] ?? "";
     const staffIds = ctx.getStaffIds();
     const leaderId = leaderName && staffIds[leaderName] ? staffIds[leaderName] : null;
@@ -144,6 +222,17 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
       const payload = await response.json().catch(() => null);
       throw new Error(payload?.error || `Save project leader failed (${response.status}).`);
     }
+    if (!options.quiet) {
+      ctx.setBackupStatus("Project leader saved.");
+    }
+  }
+
+  async function flushProjectConfigSync(projectName: string) {
+    cancelProjectMembersSync();
+    cancelProjectLeaderSync();
+    await syncProjectMembersNow(projectName, { quiet: true });
+    await syncProjectLeaderNow(projectName, { quiet: true });
+    ctx.setBackupStatus("Project saved.");
   }
 
   function scheduleProjectMembersSync(projectName: string) {
@@ -332,6 +421,7 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     deleteProject,
     scheduleProjectMembersSync,
     scheduleProjectLeaderSync,
+    flushProjectConfigSync,
     createOrgTeam,
     renameOrgTeam,
     deleteOrgTeam,

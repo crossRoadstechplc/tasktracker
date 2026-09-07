@@ -3351,6 +3351,31 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           saveBtn.textContent = "Save";
           saveBtn.hidden = true;
 
+          const membersBtn = document.createElement("button");
+          membersBtn.type = "button";
+          membersBtn.className = "project-configure-btn";
+          membersBtn.textContent = "Configure";
+          membersBtn.dataset.permission = "projects.manageMembers";
+
+          const membersPanel = document.createElement("div");
+          membersPanel.className = "team-members-panel team-members-table-row";
+          membersPanel.hidden = true;
+
+          const rowFeedback = document.createElement("div");
+          rowFeedback.className = "form-feedback project-row-feedback";
+          rowFeedback.setAttribute("role", "status");
+          rowFeedback.setAttribute("aria-live", "polite");
+
+          function clearProjectRowFeedback() {
+            rowFeedback.textContent = "";
+            rowFeedback.classList.remove("visible");
+          }
+
+          function showProjectRowFeedback(message) {
+            rowFeedback.textContent = message;
+            rowFeedback.classList.add("visible");
+          }
+
           saveBtn.addEventListener("click", async () => {
             const newName = input.value.trim();
 
@@ -3417,11 +3442,34 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               return;
             }
 
-            // Membership and Project Leader selections are persisted as they are changed.
-            // Save acts as the clear "done configuring" action and closes the panel.
+            if (!membersPanel.hidden) {
+              clearProjectRowFeedback();
+              saveBtn.disabled = true;
+              saveBtn.textContent = "Saving…";
+              try {
+                await settingsSync.flushProjectConfigSync(team);
+              } catch (error) {
+                console.error("Project config save failed.", error);
+                const message = error instanceof Error
+                  ? error.message
+                  : "Could not save project.";
+                saveBtn.disabled = false;
+                saveBtn.textContent = "Save";
+                showProjectRowFeedback(message);
+                setBackupStatus(message, true);
+                return;
+              }
+              saveBtn.disabled = false;
+              saveBtn.textContent = "Save";
+            }
+
             membersPanel.hidden = true;
             saveBtn.hidden = true;
             membersBtn.hidden = false;
+            clearProjectRowFeedback();
+            populateStaffFilter();
+            populateTeamFilter();
+            render();
           });
 
           input.addEventListener("keydown", e => {
@@ -3430,16 +3478,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               saveBtn.click();
             }
           });
-
-          const membersBtn = document.createElement("button");
-          membersBtn.type = "button";
-          membersBtn.className = "project-configure-btn";
-          membersBtn.textContent = "Configure";
-          membersBtn.dataset.permission = "projects.manageMembers";
-
-          const membersPanel = document.createElement("div");
-          membersPanel.className = "team-members-panel team-members-table-row";
-          membersPanel.hidden = true;
 
           const membersTitle = document.createElement("div");
           membersTitle.className = "team-members-title";
@@ -3472,6 +3510,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   checkbox.checked = !checkbox.checked;
                   return;
                 }
+                clearProjectRowFeedback();
                 if (!teamMembers[team]) teamMembers[team] = [];
 
                 if (checkbox.checked) {
@@ -3581,6 +3620,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           leaderSelect.addEventListener("change", () => {
             if (!can("projects.manageMembers")) return;
+            clearProjectRowFeedback();
             const selectedLeader = leaderSelect.value;
             const members = teamMembers[team] || [];
 
@@ -3595,9 +3635,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           leaderRow.appendChild(leaderLabel);
           leaderRow.appendChild(leaderSelect);
           membersPanel.appendChild(leaderRow);
+          membersPanel.appendChild(rowFeedback);
 
           membersBtn.addEventListener("click", () => {
             if (!can("projects.manageMembers")) return;
+            clearProjectRowFeedback();
             membersPanel.hidden = false;
             membersBtn.hidden = true;
             saveBtn.hidden = false;

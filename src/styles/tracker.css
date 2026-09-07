@@ -2018,6 +2018,10 @@
       display: block;
     }
 
+    .project-row-feedback {
+      margin: 10px 0 0;
+    }
+
     input.input-invalid {
       border-color: #d92d20 !important;
       box-shadow: 0 0 0 2px rgba(217, 45, 32, .1);

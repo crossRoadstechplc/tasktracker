@@ -100,11 +100,16 @@ export async function setOrgTeamMembers(input: {
   });
   if (!existing) throw new Error("Team not found.");
 
+  const memberIds = [...new Set(input.memberIds)];
+
   await prisma.$transaction(async (tx) => {
     await tx.orgTeamMember.deleteMany({ where: { orgTeamId: input.orgTeamId } });
-    for (const staffMemberId of input.memberIds) {
-      await tx.orgTeamMember.create({
-        data: { orgTeamId: input.orgTeamId, staffMemberId },
+    if (memberIds.length > 0) {
+      await tx.orgTeamMember.createMany({
+        data: memberIds.map((staffMemberId) => ({
+          orgTeamId: input.orgTeamId,
+          staffMemberId,
+        })),
       });
     }
   });
@@ -116,7 +121,7 @@ export async function setOrgTeamMembers(input: {
     actorClientId: input.actor.clientId ?? null,
     resource: "orgTeam",
     resourceId: input.orgTeamId,
-    payload: { id: input.orgTeamId, memberIds: input.memberIds },
+    payload: { id: input.orgTeamId, memberIds },
   });
 
   return { revision: published.revision };

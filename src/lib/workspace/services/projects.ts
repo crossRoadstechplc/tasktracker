@@ -132,12 +132,16 @@ export async function setProjectMembers(input: {
     select: { staffMemberId: true },
   });
   const previousMemberIds = new Set(previousMembers.map((row) => row.staffMemberId));
+  const memberIds = [...new Set(input.memberIds)];
 
   await prisma.$transaction(async (tx) => {
     await tx.projectMember.deleteMany({ where: { projectId: input.projectId } });
-    for (const staffMemberId of input.memberIds) {
-      await tx.projectMember.create({
-        data: { projectId: input.projectId, staffMemberId },
+    if (memberIds.length > 0) {
+      await tx.projectMember.createMany({
+        data: memberIds.map((staffMemberId) => ({
+          projectId: input.projectId,
+          staffMemberId,
+        })),
       });
     }
   });
@@ -149,11 +153,11 @@ export async function setProjectMembers(input: {
     actorClientId: input.actor.clientId ?? null,
     resource: "project",
     resourceId: input.projectId,
-    payload: { id: input.projectId, memberIds: input.memberIds },
+    payload: { id: input.projectId, memberIds },
   });
 
   const actorStaffId = await resolveActorStaffId(workspace.id, input.actor.userId);
-  const recipientIds = getNewAssigneeIds(previousMemberIds, input.memberIds, actorStaffId);
+  const recipientIds = getNewAssigneeIds(previousMemberIds, memberIds, actorStaffId);
   await createAssignmentNotifications({
     workspaceId: workspace.id,
     type: "PROJECT_ASSIGNED",
