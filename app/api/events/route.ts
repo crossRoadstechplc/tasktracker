@@ -1,5 +1,8 @@
 ﻿import { proxyToTaskTracker } from "@/src/lib/api/proxy";
 
+/** Vercel serverless max for SSE proxy (Pro plan can raise further in vercel.json). */
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const suffix = url.pathname.replace(/^\/api/, "") + url.search;

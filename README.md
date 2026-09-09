@@ -1,32 +1,27 @@
 # SPX Task Tracker
 
-Next.js app with PostgreSQL (Neon), JWT cookie auth, email invites, and incremental REST APIs with SSE realtime.
+Next.js **Task Operations** UI for Workforce. Browser calls this app’s `/api/*` BFF; the BFF proxies to **workforce-backend** `/api/v1/task-tracker/*` (workforce JWT cookies). Deploy the UI to **Vercel**; the API/DB stay on workforce-backend.
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` and fill in values (or use your existing Neon `.env`).
-2. Apply migrations and seed:
+1. Copy `.env.example` to `.env` and set `BACKEND_API_BASE_URL` to your local workforce API (`http://localhost:4000/api/v1`).
+2. Ensure workforce-backend is running (with Task Operations migrate/seed).
+3. Start the tracker (use port 3001 if the admin portal already uses 3000):
 
 ```bash
 npm install
-npm run db:deploy
-npm run db:seed
-npm run db:seed:auth
+npm run dev -- -p 3001
 ```
 
-3. Start the dev server:
+Open [http://localhost:3001](http://localhost:3001). Prefer portal **Continue** handoff over standalone login when integrating with Workforce.
 
-```bash
-npm run dev
-```
+## Vercel production
 
-Open [http://localhost:3000](http://localhost:3000). Seed auth users use `@tracker.local` emails (see `src/lib/auth/seed-users.ts`) with password `ChangeMe123!`.
+See [docs/VERCEL.md](docs/VERCEL.md). Minimum env: `BACKEND_API_BASE_URL`.
 
 ## Realtime (SSE)
 
-Live updates use **Server-Sent Events** at `GET /api/events` (cookie session required). Mutations publish through Postgres `LISTEN/NOTIFY`.
-
-Neon pooler URLs cannot `LISTEN`. The app derives a direct URL from `DATABASE_URL` by stripping `-pooler.` from the host. If that fails, set `DIRECT_URL` in `.env` to the same database using the non-pooler host.
+Live updates use **Server-Sent Events** at `GET /api/events` (cookie session required), proxied to workforce-backend. On Vercel, connections are limited by function `maxDuration` and reconnect automatically.
 
 ## API overview
 
