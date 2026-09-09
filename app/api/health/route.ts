@@ -1,26 +1,21 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/src/lib/prisma";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+import { backendFetch } from "@/src/lib/api/backend";
 
 export async function GET() {
-  const checks: Record<string, string> = {
-    jwt: process.env.JWT_SECRET ? "ok" : "missing",
-    database: "unknown",
-  };
-
   try {
-    await prisma.$queryRaw`SELECT 1`;
-    checks.database = "ok";
+    const response = await backendFetch("/health");
+    const data = await response.json().catch(() => ({ status: "unknown" }));
+    return NextResponse.json(
+      {
+        status: response.ok ? "ok" : "degraded",
+        backend: data,
+      },
+      { status: response.ok ? 200 : 503 },
+    );
   } catch {
-    checks.database = "error";
+    return NextResponse.json(
+      { status: "error", error: "Backend unreachable" },
+      { status: 503 },
+    );
   }
-
-  const healthy = checks.jwt === "ok" && checks.database === "ok";
-
-  return NextResponse.json(
-    { ok: healthy, checks },
-    { status: healthy ? 200 : 503 },
-  );
 }

@@ -1,17 +1,20 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { REFRESH_TOKEN_COOKIE } from "@/src/lib/auth/constants";
-import { clearAuthCookies, revokeRefreshToken } from "@/src/lib/auth/session";
+import { backendFetch } from "@/src/lib/api/backend";
+import { clearAuthCookies, readSessionCookies } from "@/src/lib/auth/bff-session";
 
 export async function POST() {
-  const cookieStore = await cookies();
-  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
-
+  const { refreshToken } = await readSessionCookies();
   if (refreshToken) {
-    await revokeRefreshToken(refreshToken);
+    try {
+      await backendFetch("/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      // ignore upstream logout failures
+    }
   }
-
-  const response = NextResponse.json({ ok: true });
-  clearAuthCookies(response);
-  return response;
+  const res = NextResponse.json({ ok: true });
+  clearAuthCookies(res);
+  return res;
 }

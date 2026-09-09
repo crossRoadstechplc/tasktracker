@@ -1,138 +1,154 @@
-import { Prisma } from "@/src/generated/prisma/client";
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { getInviteTtlHours } from "@/src/lib/auth/mail";
-import { verifyPassword } from "@/src/lib/auth/password";
-import {
-  issueAuthTokens,
-  setAuthCookies,
-} from "@/src/lib/auth/session";
-import { prisma } from "@/src/lib/prisma";
-import { PERMISSION_ROLE_FROM_DB } from "@/src/lib/workspace/roles";
-import { checkLoginRateLimit } from "@/src/lib/auth/rate-limit";
+import { backendFetch } from "@/src/lib/api/backend";
+import { clearAuthCookies, setAuthCookies, unwrapPayload } from "@/src/lib/api/proxy";
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
+type JsonRecord = Record<string, unknown>;
 
-function isInviteExpired(invitedAt: Date | null): boolean {
-  if (!invitedAt) return false;
-  const expiresAt = new Date(invitedAt);
-  expiresAt.setHours(expiresAt.getHours() + getInviteTtlHours());
-  return Date.now() > expiresAt.getTime();
-}
+async function composeMeResponse(accessToken: string): Promise<NextResponse> {
+  const [wfRes, ttRes] = await Promise.all([
+    backendFetch("/auth/me", {
+      headers: { authorization: `Bearer ${accessToken}` },
+    }),
+    backendFetch("/task-tracker/me", {
+      headers: { authorization: `Bearer ${accessToken}` },
+    }),
+  ]);
 
-function loginErrorMessage(error: unknown): { message: string; status: number } {
-  if (error instanceof Error && error.message === "JWT_SECRET is not set.") {
-    return {
-      message: "Server auth is not configured. Set JWT_SECRET in .env and restart the dev server.",
-      status: 503,
-    };
+  if (!wfRes.ok) {
+    const res = NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    clearAuthCookies(res);
+    return res;
   }
 
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === "P1001" || error.code === "ETIMEDOUT") {
-      return {
-        message: "Could not reach the database. Check DATABASE_URL and your Neon connection.",
-        status: 503,
-      };
-    }
+  const wf = unwrapPayload((await wfRes.json().catch(() => ({}))) as JsonRecord);
+  const tt = ttRes.ok
+    ? unwrapPayload((await ttRes.json().catch(() => ({}))) as JsonRecord)
+    : null;
 
-    if (error.code === "P2021") {
-      return {
-        message: "Auth tables are missing. Run npm run db:migrate and npm run db:seed.",
-        status: 503,
-      };
-    }
+  const user =
+    wf.user && typeof wf.user === "object"
+      ? (wf.user as JsonRecord)
+      : { id: wf.id, email: wf.email };
+
+  const staffMember =
+    tt && tt.staffMember && typeof tt.staffMember === "object"
+      ? (tt.staffMember as JsonRecord)
+      : null;
+
+  if (!staffMember) {
+    return NextResponse.json(
+      {
+        error:
+          "Task Operations is not enabled for your organization, or you are not a member yet.",
+      },
+      { status: 403 },
+    );
   }
 
-  return {
-    message: "Could not sign in right now. Try again in a moment.",
-    status: 500,
-  };
+  return NextResponse.json({
+    user: {
+      id: String(user.id ?? ""),
+      email: String(user.email ?? ""),
+    },
+    staffMember: {
+      id: String(staffMember.id ?? ""),
+      displayName: String(staffMember.displayName ?? ""),
+      firstName: String(staffMember.firstName ?? staffMember.displayName ?? ""),
+      lastName: String(staffMember.lastName ?? ""),
+      jobTitle: String(staffMember.jobTitle ?? ""),
+      permissionRole: String(staffMember.permissionRole ?? "Junior Staff"),
+    },
+  });
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
-
+  let body: JsonRecord;
   try {
-    body = await request.json();
+    body = (await request.json()) as JsonRecord;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = loginSchema.safeParse(body);
-  if (!parsed.success) {
+  const email =
+    typeof body.email === "string"
+      ? body.email.trim()
+      : typeof body.login === "string"
+        ? body.login.trim()
+        : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!email || !password) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
 
   try {
-    const email = parsed.data.email.trim().toLowerCase();
-
-    if (checkLoginRateLimit(request, email)) {
-      return NextResponse.json(
-        { error: "Too many sign-in attempts. Try again later." },
-        { status: 429 },
-      );
+    const payload: JsonRecord = {
+      login: email,
+      password,
+      deviceId: "task-tracker-web",
+    };
+    if (typeof body.organizationSlug === "string" && body.organizationSlug.trim()) {
+      payload.organizationSlug = body.organizationSlug.trim();
+    }
+    if (typeof body.contextKey === "string" && body.contextKey.trim()) {
+      payload.contextKey = body.contextKey.trim();
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { staffMember: true },
+    const response = await backendFetch("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
+    const data = unwrapPayload((await response.json().catch(() => ({}))) as JsonRecord);
 
-    if (!user || !user.staffMember) {
-      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+    if (!response.ok) {
+      const err =
+        typeof (data as { error?: { message?: string } }).error?.message === "string"
+          ? (data as { error: { message: string } }).error.message
+          : typeof data.message === "string"
+            ? data.message
+            : "Invalid email or password.";
+      return NextResponse.json({ error: err }, { status: response.status });
     }
 
-    const passwordMatches = await verifyPassword(parsed.data.password, user.passwordHash);
-    if (!passwordMatches) {
-      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+    if (data.requiresContextSelection === true) {
+      return NextResponse.json({
+        requiresContextSelection: true,
+        preAuthToken: data.preAuthToken,
+        contexts: data.contexts,
+        defaultContextKey: data.defaultContextKey ?? null,
+      });
     }
 
-    if (user.mustChangePassword && isInviteExpired(user.invitedAt)) {
-      return NextResponse.json(
-        {
-          error: "This invite has expired. Ask an admin to send a new invite.",
-        },
-        { status: 403 },
-      );
+    const accessToken = typeof data.accessToken === "string" ? data.accessToken : null;
+    const refreshToken = typeof data.refreshToken === "string" ? data.refreshToken : null;
+    if (!accessToken || !refreshToken) {
+      return NextResponse.json({ error: "Login response incomplete." }, { status: 502 });
     }
 
-    if (user.mustChangePassword) {
-      return NextResponse.json(
-        {
-          error:
-            "Please use the invite link from your email to set your password before signing in.",
-        },
-        { status: 403 },
-      );
+    if (data.mustChangePassword === true) {
+      const res = NextResponse.json({
+        requiresPasswordChange: true,
+        email,
+      });
+      setAuthCookies(res, accessToken, refreshToken);
+      return res;
     }
 
-    const { accessToken, refreshToken } = await issueAuthTokens({
-      id: user.id,
-      email: user.email,
-      staffMember: { id: user.staffMember.id },
-    });
-
-    const response = NextResponse.json({
-      user: { id: user.id, email: user.email },
-      staffMember: {
-        id: user.staffMember.id,
-        displayName: user.staffMember.displayName,
-        firstName: user.staffMember.firstName,
-        lastName: user.staffMember.lastName,
-        jobTitle: user.staffMember.jobTitle,
-        permissionRole: PERMISSION_ROLE_FROM_DB[user.staffMember.permissionRole],
-      },
-    });
-
-    setAuthCookies(response, accessToken, refreshToken);
-    return response;
+    const me = await composeMeResponse(accessToken);
+    if (!me.ok) return me;
+    const meBody = await me.json();
+    const res = NextResponse.json(meBody);
+    setAuthCookies(res, accessToken, refreshToken);
+    return res;
   } catch (error) {
-    console.error("Login failed.", error);
-    const { message, status } = loginErrorMessage(error);
-    return NextResponse.json({ error: message }, { status });
+    const aborted = error instanceof Error && error.name === "AbortError";
+    return NextResponse.json(
+      {
+        error: aborted
+          ? "Login timed out talking to the API."
+          : "Login could not reach the workforce API. Check BACKEND_API_BASE_URL.",
+      },
+      { status: 502 },
+    );
   }
 }

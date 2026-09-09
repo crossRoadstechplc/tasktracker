@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -18,8 +18,7 @@
     "db:cleanup-test": "tsx scripts/cleanup-test-data.ts",
     "db:cleanup-test:dry-run": "tsx scripts/cleanup-test-data.ts --dry-run",
     "db:up": "docker compose up -d",
-    "build:tracker": "node scripts/build-tracker-app.mjs",
-    "postinstall": "prisma generate"
+    "build:tracker": "node scripts/build-tracker-app.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

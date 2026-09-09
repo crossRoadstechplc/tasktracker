@@ -1,47 +1,35 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { requirePermission, requireSession } from "@/src/lib/api/guard";
-import { jsonWithSession, workspaceRevisionHeaders } from "@/src/lib/api/response";
-import { actorFromAuth, getActorClientId, serviceErrorResponse } from "@/src/lib/api/route-helpers";
-import { createProject } from "@/src/lib/workspace/services/projects";
+﻿import { proxyToTaskTracker } from "@/src/lib/api/proxy";
 
-const createSchema = z.object({ name: z.string().trim().min(1) });
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  return proxyToTaskTracker(suffix, { method: "GET" });
+}
 
 export async function POST(request: Request) {
-  const sessionResult = await requireSession();
-  if ("error" in sessionResult) return sessionResult.error;
-  const { session } = sessionResult;
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "POST", body: body || undefined });
+}
 
-  const allowed = await requirePermission(session.auth, "projects.create");
-  if ("error" in allowed) return allowed.error;
+export async function PUT(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "PUT", body: body || undefined });
+}
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
+export async function PATCH(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "PATCH", body: body || undefined });
+}
 
-  const parsed = createSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Project name is required." }, { status: 400 });
-  }
-
-  try {
-    const result = await createProject({
-      actor: actorFromAuth(session.auth, getActorClientId(request)),
-      name: parsed.data.name,
-    });
-    return jsonWithSession(
-      result,
-      {
-        auth: session.auth,
-        payload: session.payload,
-        hadValidAccess: session.hadValidAccess,
-        headers: workspaceRevisionHeaders(result.revision),
-      },
-    );
-  } catch (error) {
-    return serviceErrorResponse(error);
-  }
+export async function DELETE(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "DELETE", body: body || undefined });
 }

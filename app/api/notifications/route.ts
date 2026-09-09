@@ -1,20 +1,35 @@
-import { NextResponse } from "next/server";
-import { requireSession } from "@/src/lib/api/guard";
-import { jsonWithSession } from "@/src/lib/api/response";
-import {
-  listNotificationsForRecipient,
-} from "@/src/lib/notifications/service";
+﻿import { proxyToTaskTracker } from "@/src/lib/api/proxy";
 
-export async function GET() {
-  const sessionResult = await requireSession();
-  if ("error" in sessionResult) return sessionResult.error;
-  const { session } = sessionResult;
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  return proxyToTaskTracker(suffix, { method: "GET" });
+}
 
-  const result = await listNotificationsForRecipient(session.auth.staffMember.id);
+export async function POST(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "POST", body: body || undefined });
+}
 
-  return jsonWithSession(result, {
-    auth: session.auth,
-    payload: session.payload,
-    hadValidAccess: session.hadValidAccess,
-  });
+export async function PUT(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "PUT", body: body || undefined });
+}
+
+export async function PATCH(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "PATCH", body: body || undefined });
+}
+
+export async function DELETE(request: Request) {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const body = await request.text();
+  return proxyToTaskTracker(suffix, { method: "DELETE", body: body || undefined });
 }

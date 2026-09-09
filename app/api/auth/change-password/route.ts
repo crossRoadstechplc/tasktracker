@@ -1,103 +1,37 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { getInviteTtlHours } from "@/src/lib/auth/mail";
-import { hashPassword, verifyPassword } from "@/src/lib/auth/password";
-import {
-  issueAuthTokens,
-  setAuthCookies,
-} from "@/src/lib/auth/session";
-import { prisma } from "@/src/lib/prisma";
-import { PERMISSION_ROLE_FROM_DB } from "@/src/lib/workspace/roles";
+import { backendFetch } from "@/src/lib/api/backend";
+import { getValidAccessToken, unwrapPayload } from "@/src/lib/api/proxy";
 
-const changePasswordSchema = z.object({
-  email: z.string().email(),
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8, "New password must be at least 8 characters."),
-});
-
-function isInviteExpired(invitedAt: Date | null): boolean {
-  if (!invitedAt) return false;
-  const expiresAt = new Date(invitedAt);
-  expiresAt.setHours(expiresAt.getHours() + getInviteTtlHours());
-  return Date.now() > expiresAt.getTime();
-}
+type JsonRecord = Record<string, unknown>;
 
 export async function POST(request: Request) {
-  let body: unknown;
+  let body: JsonRecord;
   try {
-    body = await request.json();
+    body = (await request.json()) as JsonRecord;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = changePasswordSchema.safeParse(body);
-  if (!parsed.success) {
-    const firstIssue = parsed.error.issues[0]?.message;
-    return NextResponse.json(
-      { error: firstIssue ?? "Email, current password, and new password are required." },
-      { status: 400 },
-    );
+  const session = await getValidAccessToken();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const email = parsed.data.email.trim().toLowerCase();
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: { staffMember: true },
+  const response = await backendFetch("/auth/change-password", {
+    method: "POST",
+    headers: { authorization: `Bearer ${session.accessToken}` },
+    body: JSON.stringify({
+      currentPassword: body.currentPassword ?? body.oldPassword,
+      newPassword: body.newPassword ?? body.password,
+    }),
   });
-
-  if (!user || !user.staffMember) {
-    return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+  const data = unwrapPayload((await response.json().catch(() => ({}))) as JsonRecord);
+  if (!response.ok) {
+    const message =
+      typeof (data as { error?: { message?: string } }).error?.message === "string"
+        ? (data as { error: { message: string } }).error.message
+        : "Could not change password.";
+    return NextResponse.json({ error: message }, { status: response.status });
   }
-
-  const passwordMatches = await verifyPassword(
-    parsed.data.currentPassword,
-    user.passwordHash,
-  );
-  if (!passwordMatches) {
-    return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
-  }
-
-  if (user.mustChangePassword && isInviteExpired(user.invitedAt)) {
-    return NextResponse.json(
-      { error: "This invite has expired. Ask an admin to send a new invite." },
-      { status: 403 },
-    );
-  }
-
-  if (parsed.data.newPassword === parsed.data.currentPassword) {
-    return NextResponse.json(
-      { error: "Choose a new password that is different from the temporary one." },
-      { status: 400 },
-    );
-  }
-
-  const passwordHash = await hashPassword(parsed.data.newPassword);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      passwordHash,
-      mustChangePassword: false,
-    },
-  });
-
-  const { accessToken, refreshToken } = await issueAuthTokens({
-    id: user.id,
-    email: user.email,
-    staffMember: { id: user.staffMember.id },
-  });
-
-  const response = NextResponse.json({
-    user: { id: user.id, email: user.email },
-    staffMember: {
-      id: user.staffMember.id,
-      displayName: user.staffMember.displayName,
-      firstName: user.staffMember.firstName,
-      lastName: user.staffMember.lastName,
-      jobTitle: user.staffMember.jobTitle,
-      permissionRole: PERMISSION_ROLE_FROM_DB[user.staffMember.permissionRole],
-    },
-  });
-
-  setAuthCookies(response, accessToken, refreshToken);
-  return response;
+  return NextResponse.json({ ok: true });
 }
