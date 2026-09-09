@@ -149,4 +149,4 @@ function streamProxyResponse(
   return res;
 }
 
-export { setAuthCookies, clearAuthCookies, unwrapPayload, getValidAccessToken };
+export { setAuthCookies, clearAuthCookies, unwrapPayload };
