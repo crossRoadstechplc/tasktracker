@@ -74,7 +74,8 @@ export function AcceptInviteForm() {
       <div className="login-page">
         <div className="login-card">
           <div className="brand">
-            <h1>Company Task Tracker</h1>
+            <p className="login-eyebrow">Workforce Platform</p>
+            <h1>Task Tracker</h1>
             <p className="backup-status visible error">
               This invite link is invalid. Ask your admin to send a new invite.
             </p>
@@ -88,7 +89,8 @@ export function AcceptInviteForm() {
     <div className="login-page">
       <div className="login-card">
         <div className="brand">
-          <h1>Company Task Tracker</h1>
+          <p className="login-eyebrow">Workforce Platform</p>
+          <h1>Task Tracker</h1>
           <p>Accept your invite and set a password to continue.</p>
         </div>
 

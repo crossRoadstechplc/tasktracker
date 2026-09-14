@@ -76,7 +76,8 @@ export function ChangePasswordForm() {
     <div className="login-page">
       <div className="login-card">
         <div className="brand">
-          <h1>Company Task Tracker</h1>
+          <p className="login-eyebrow">Workforce Platform</p>
+          <h1>Task Tracker</h1>
           <p>Set a new password to finish signing in.</p>
         </div>
 

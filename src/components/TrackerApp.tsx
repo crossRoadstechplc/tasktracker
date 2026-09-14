@@ -115,7 +115,7 @@ export function TrackerApp() {
         <div className="app-content">
           <header className="main-header">
             <div className="brand">
-              <h1>Company Task Tracker</h1>
+              <h1>Task Tracker</h1>
               <p className="backup-status visible error">{loadState.message}</p>
             </div>
           </header>
