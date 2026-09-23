@@ -38,7 +38,7 @@ export function buildInviteEmailContent(input: {
     "",
     "Invite requirements:",
     "1. Open the secure invite link below.",
-    "2. Create your own password (at least 8 characters).",
+    "2. Create your own password (at least 6 characters).",
     "3. Sign in with your email and new password.",
     "",
     `Accept invite: ${input.acceptUrl}`,
@@ -74,7 +74,7 @@ export function buildInviteEmailContent(input: {
                 <p style="margin:0 0 8px 0;font-size:15px;font-weight:bold;">Invite requirements</p>
                 <ol style="margin:0 0 20px 20px;padding:0;font-size:14px;line-height:1.6;color:#333333;">
                   <li>Open the secure invite link below.</li>
-                  <li>Create your own password (at least 8 characters).</li>
+                  <li>Create your own password (at least 6 characters).</li>
                   <li>Sign in with your email and new password.</li>
                 </ol>
                 <p style="margin:0 0 18px 0;">

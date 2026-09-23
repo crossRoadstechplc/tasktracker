@@ -24,8 +24,8 @@ export function ChangePasswordForm() {
     setLoading(true);
     setError(null);
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+    if (newPassword.length < 6) {
+      setError("New password must be at least 6 characters.");
       setLoading(false);
       return;
     }
@@ -111,8 +111,8 @@ export function ChangePasswordForm() {
               autoComplete="new-password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
-              placeholder="At least 8 characters"
-              minLength={8}
+              placeholder="At least 6 characters"
+              minLength={6}
               required
             />
           </label>
@@ -124,7 +124,7 @@ export function ChangePasswordForm() {
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              minLength={8}
+              minLength={6}
               required
             />
           </label>
