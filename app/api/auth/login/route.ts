@@ -36,13 +36,13 @@ async function composeMeResponse(accessToken: string): Promise<NextResponse> {
       : null;
 
   if (!staffMember) {
-    return NextResponse.json(
-      {
-        error:
-          "Task Operations is not enabled for your organization, or you are not a member yet.",
-      },
-      { status: 403 },
-    );
+    const ttError =
+      "Could not open Task Operations for this Workforce account. Make sure you belong to an organization with employees.";
+    console.log("[tt-auth] workforce login ok but no tracker staff", {
+      status: ttRes.status,
+      email: String(user.email ?? ""),
+    });
+    return NextResponse.json({ error: ttError }, { status: 403 });
   }
 
   return NextResponse.json({
@@ -81,6 +81,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
 
+  console.log("[tt-auth] login via workforce backend", {
+    login: email,
+    backend: process.env.BACKEND_API_BASE_URL ?? "http://localhost:4000/api/v1",
+  });
+
   try {
     const payload: JsonRecord = {
       login: email,
@@ -98,9 +103,16 @@ export async function POST(request: Request) {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    const data = unwrapPayload((await response.json().catch(() => ({}))) as JsonRecord);
+    let data = unwrapPayload((await response.json().catch(() => ({}))) as JsonRecord);
 
     if (!response.ok) {
+      console.log("[tt-auth] workforce login rejected", {
+        status: response.status,
+        message:
+          typeof (data as { error?: { message?: string } }).error?.message === "string"
+            ? (data as { error: { message: string } }).error.message
+            : data.message,
+      });
       const err =
         typeof (data as { error?: { message?: string } }).error?.message === "string"
           ? (data as { error: { message: string } }).error.message
@@ -110,18 +122,60 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err }, { status: response.status });
     }
 
+    // Multi-role Workforce accounts need a context before cookies can be issued.
+    // Auto-pick default (or first) context so Task Tracker stays Workforce-auth only.
     if (data.requiresContextSelection === true) {
-      return NextResponse.json({
-        requiresContextSelection: true,
-        preAuthToken: data.preAuthToken,
-        contexts: data.contexts,
-        defaultContextKey: data.defaultContextKey ?? null,
+      const contexts = Array.isArray(data.contexts) ? data.contexts : [];
+      const defaultKey =
+        typeof data.defaultContextKey === "string" && data.defaultContextKey
+          ? data.defaultContextKey
+          : null;
+      const firstKey =
+        contexts[0] && typeof contexts[0] === "object" && typeof (contexts[0] as JsonRecord).key === "string"
+          ? String((contexts[0] as JsonRecord).key)
+          : null;
+      const contextKey = defaultKey || firstKey;
+      const preAuthToken = typeof data.preAuthToken === "string" ? data.preAuthToken : null;
+
+      console.log("[tt-auth] requires context selection — auto selecting", {
+        contextKey,
+        contextCount: contexts.length,
       });
+
+      if (!contextKey || !preAuthToken) {
+        return NextResponse.json(
+          {
+            error:
+              "This Workforce account needs a role context, but none was available. Ask an admin to assign organization access.",
+          },
+          { status: 403 },
+        );
+      }
+
+      const selectRes = await backendFetch("/auth/select-context", {
+        method: "POST",
+        body: JSON.stringify({
+          preAuthToken,
+          contextKey,
+          deviceId: "task-tracker-web",
+        }),
+      });
+      data = unwrapPayload((await selectRes.json().catch(() => ({}))) as JsonRecord);
+      if (!selectRes.ok) {
+        const err =
+          typeof (data as { error?: { message?: string } }).error?.message === "string"
+            ? (data as { error: { message: string } }).error.message
+            : "Could not select Workforce login context.";
+        return NextResponse.json({ error: err }, { status: selectRes.status });
+      }
     }
 
     const accessToken = typeof data.accessToken === "string" ? data.accessToken : null;
     const refreshToken = typeof data.refreshToken === "string" ? data.refreshToken : null;
     if (!accessToken || !refreshToken) {
+      console.log("[tt-auth] login response missing tokens", {
+        keys: Object.keys(data),
+      });
       return NextResponse.json({ error: "Login response incomplete." }, { status: 502 });
     }
 
@@ -135,13 +189,24 @@ export async function POST(request: Request) {
     }
 
     const me = await composeMeResponse(accessToken);
-    if (!me.ok) return me;
+    if (!me.ok) {
+      console.log("[tt-auth] workforce login ok but task-tracker membership missing", {
+        status: me.status,
+      });
+      return me;
+    }
     const meBody = await me.json();
+    console.log("[tt-auth] login success (workforce users + task tracker staff)", {
+      email: meBody?.user?.email,
+      staff: meBody?.staffMember?.displayName,
+      role: meBody?.staffMember?.permissionRole,
+    });
     const res = NextResponse.json(meBody);
     setAuthCookies(res, accessToken, refreshToken);
     return res;
   } catch (error) {
     const aborted = error instanceof Error && error.name === "AbortError";
+    console.error("[tt-auth] login failed talking to workforce backend", error);
     return NextResponse.json(
       {
         error: aborted

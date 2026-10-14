@@ -1,35 +1,13 @@
-﻿import { proxyToTaskTracker } from "@/src/lib/api/proxy";
+﻿import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
-  return proxyToTaskTracker(suffix, { method: "GET" });
-}
-
-export async function POST(request: Request) {
-  const url = new URL(request.url);
-  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
-  const body = await request.text();
-  return proxyToTaskTracker(suffix, { method: "POST", body: body || undefined });
-}
-
-export async function PUT(request: Request) {
-  const url = new URL(request.url);
-  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
-  const body = await request.text();
-  return proxyToTaskTracker(suffix, { method: "PUT", body: body || undefined });
-}
-
-export async function PATCH(request: Request) {
-  const url = new URL(request.url);
-  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
-  const body = await request.text();
-  return proxyToTaskTracker(suffix, { method: "PATCH", body: body || undefined });
-}
-
-export async function DELETE(request: Request) {
-  const url = new URL(request.url);
-  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
-  const body = await request.text();
-  return proxyToTaskTracker(suffix, { method: "DELETE", body: body || undefined });
+/** Tracker invites are retired — people come from Workforce. */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "Inviting from Task Operations is disabled. Add people in Workforce; they appear here automatically.",
+      code: "TRACKER_INVITE_RETIRED"
+    },
+    { status: 410 }
+  );
 }

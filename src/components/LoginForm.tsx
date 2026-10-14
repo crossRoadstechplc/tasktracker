@@ -46,6 +46,9 @@ function EyeIcon({ visible }: { visible: boolean }) {
 function safeNextPath(value: string | null): string {
   if (!value) return "/";
   if (!value.startsWith("/") || value.startsWith("//")) return "/";
+  if (value.startsWith("/login") || value.startsWith("/.") || value.includes("/.well-known/")) {
+    return "/";
+  }
   return value;
 }
 
@@ -110,7 +113,7 @@ export function LoginForm() {
         <div className="brand">
           <p className="login-eyebrow">Workforce Platform</p>
           <h1>Task Tracker</h1>
-          <p>Sign in with your team account to continue.</p>
+          <p>Sign in with your Workforce email or employee code — same account as the admin portal / employee app.</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>

@@ -51,6 +51,15 @@ export const TRACKER_SHELL_HTML = `
             <span class="sidebar-label">Completed Tasks</span>
             <span class="sidebar-count" id="archivedCount">0</span>
           </button>
+
+          <button class="sidebar-nav-item" id="ongoingNavBtn" type="button">
+            <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M12 7.5v5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg></span>
+            <span class="sidebar-label">Ongoing</span>
+            <span class="sidebar-count" id="ongoingCount">0</span>
+          </button>
         </div>
 
         <div class="sidebar-nav-group">
@@ -96,32 +105,51 @@ export const TRACKER_SHELL_HTML = `
         </div>
       </nav>
 
-      <div class="sidebar-footer">
-        <div class="sidebar-current-user">
-          <span class="sidebar-current-user-label">Signed in as</span>
-          <select id="currentUserSelect" aria-label="Signed in as"></select>
+      <div class="sidebar-footer is-collapsed" id="sidebarFooter">
+        <button
+          class="sidebar-footer-toggle"
+          id="sidebarFooterToggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="sidebarFooterPanel"
+          title="Show account &amp; backup"
+        >
+          <span class="sidebar-footer-toggle-text">
+            <span class="sidebar-footer-toggle-kicker">Account</span>
+            <strong class="sidebar-footer-toggle-name" id="sidebarFooterToggleName">Signed in</strong>
+          </span>
+          <svg class="sidebar-footer-toggle-chevron" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 14.5 12 9l6 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <div class="sidebar-footer-panel" id="sidebarFooterPanel" hidden>
+          <div class="sidebar-current-user">
+            <span class="sidebar-current-user-label">Signed in as</span>
+            <select id="currentUserSelect" aria-label="Signed in as"></select>
+          </div>
+          <div class="sidebar-data-actions">
+            <button class="sidebar-data-btn" id="exportDataBtn" type="button" data-permission="backup.export">
+              <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12"></path>
+                <path d="m8 11 4 4 4-4"></path>
+                <path d="M5 20h14"></path>
+              </svg>
+              <span>Export backup</span>
+            </button>
+            <button class="sidebar-data-btn" id="importDataBtn" type="button" data-permission="backup.import">
+              <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4"></path>
+                <path d="m8 8 4-4 4 4"></path>
+                <path d="M5 20h14"></path>
+              </svg>
+              <span>Import backup</span>
+            </button>
+            <input id="importDataInput" type="file" accept=".json,application/json" hidden>
+          </div>
+          <div class="backup-status" id="backupStatus" role="status" aria-live="polite"></div>
+          <span class="sidebar-footer-meta">Task Tracker · v1.0</span>
         </div>
-        <div class="sidebar-data-actions">
-          <button class="sidebar-data-btn" id="exportDataBtn" type="button" data-permission="backup.export">
-            <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3v12"></path>
-              <path d="m8 11 4 4 4-4"></path>
-              <path d="M5 20h14"></path>
-            </svg>
-            <span>Export backup</span>
-          </button>
-          <button class="sidebar-data-btn" id="importDataBtn" type="button" data-permission="backup.import">
-            <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 16V4"></path>
-              <path d="m8 8 4-4 4 4"></path>
-              <path d="M5 20h14"></path>
-            </svg>
-            <span>Import backup</span>
-          </button>
-          <input id="importDataInput" type="file" accept=".json,application/json" hidden>
-        </div>
-        <div class="backup-status" id="backupStatus" role="status" aria-live="polite"></div>
-        <span class="sidebar-footer-meta">Task Tracker · v1.0</span>
       </div>
     </aside>
 
@@ -195,9 +223,17 @@ export const TRACKER_SHELL_HTML = `
         </div>
       </div>
 
-      <div class="management-toolbar" data-permission="teams.create">
-        <input id="newOrgTeamName" placeholder="e.g. Operations, Finance, Engineering">
-        <button type="button" class="btn-primary" id="addOrgTeamBtn" data-permission="teams.create">Add Team</button>
+      <div class="management-toolbar project-create-toolbar">
+        <input id="newOrgTeamName" placeholder="e.g. Operations, Finance, Engineering" aria-label="New team name">
+        <button
+          type="button"
+          class="btn-primary project-create-btn"
+          id="addOrgTeamBtn"
+          data-permission="teams.create"
+          data-permission-mode="disable"
+        >
+          Create Team
+        </button>
       </div>
       <div class="form-feedback" id="orgTeamFormFeedback" role="status" aria-live="polite"></div>
 
@@ -208,44 +244,10 @@ export const TRACKER_SHELL_HTML = `
       <div class="workspace-section-header">
         <div>
           <h2>Team Members</h2>
-          <p>Add, rename, or remove team members. Task assignment dropdowns update automatically.</p>
+          <p>Synced from Workforce. Set Task Operations permission roles here — assign projects so members can see their tasks.</p>
         </div>
       </div>
 
-      <div class="management-toolbar add-team-member-toolbar" data-permission="staff.create">
-        <label class="add-team-member-field">
-          <span>First Name</span>
-          <input id="newStaffFirstName" placeholder="e.g. Hana" autocomplete="off">
-        </label>
-
-        <label class="add-team-member-field">
-          <span>Last Name</span>
-          <input id="newStaffLastName" placeholder="e.g. Bekele" autocomplete="off">
-        </label>
-
-        <label class="add-team-member-field">
-          <span>Email</span>
-          <input id="newStaffEmail" type="email" placeholder="e.g. hana@company.com" autocomplete="off">
-        </label>
-
-        <label class="add-team-member-field">
-          <span>Job Title</span>
-          <input id="newStaffRole" placeholder="e.g. Operations Lead" autocomplete="off">
-        </label>
-
-        <label class="add-team-member-field">
-          <span>Permission Role</span>
-          <select id="newStaffPermissionRole" aria-label="Permission Role">
-            <option value="Junior Staff" selected>Junior Staff</option>
-            <option value="Senior Staff">Senior Staff</option>
-            <option value="Lead">Lead</option>
-            <option value="Admin">Admin</option>
-            <option value="Super Admin">Super Admin</option>
-          </select>
-        </label>
-
-        <button type="button" class="btn-primary add-team-member-btn" id="addStaffBtn" data-permission="staff.create">Invite &amp; Add</button>
-      </div>
       <div class="form-feedback" id="staffFormFeedback" role="status" aria-live="polite"></div>
 
       <div class="staff-manager management-list" id="staffManagerList"></div>
@@ -259,9 +261,17 @@ export const TRACKER_SHELL_HTML = `
         </div>
       </div>
 
-      <div class="management-toolbar" data-permission="projects.create">
-        <input id="newTeamName" placeholder="e.g. Website Redesign, Q4 Launch, Expansion">
-        <button type="button" class="btn-primary" id="addTeamBtn" data-permission="projects.create">Add Project</button>
+      <div class="management-toolbar project-create-toolbar">
+        <input id="newTeamName" placeholder="e.g. Website Redesign, Q4 Launch, Expansion" aria-label="New project name">
+        <button
+          type="button"
+          class="btn-primary project-create-btn"
+          id="addTeamBtn"
+          data-permission="projects.create"
+          data-permission-mode="disable"
+        >
+          Create Project
+        </button>
       </div>
       <div class="form-feedback" id="projectFormFeedback" role="status" aria-live="polite"></div>
 
@@ -402,6 +412,24 @@ export const TRACKER_SHELL_HTML = `
       <div class="trash-list management-list" id="completedTasksList"></div>
     </section>
 
+    <section class="workspace-view management-page" id="ongoingView">
+      <div class="workspace-section-header">
+        <div>
+          <h2>Ongoing Activity</h2>
+          <p>Projects first — expand a project to see each employee’s open work, progress, and task detail.</p>
+        </div>
+      </div>
+
+      <div class="ongoing-summary" id="ongoingSummary"></div>
+      <div class="ongoing-toolbar">
+        <input id="ongoingSearch" type="search" placeholder="Search projects, people, or tasks" aria-label="Search ongoing activity">
+        <select id="ongoingDeptFilter" aria-label="Filter by department">
+          <option value="All">All departments</option>
+        </select>
+      </div>
+      <div class="ongoing-list management-list" id="ongoingList"></div>
+    </section>
+
     <section class="workspace-view management-page" id="trashView">
       <div class="workspace-section-header">
         <div>
@@ -432,6 +460,31 @@ export const TRACKER_SHELL_HTML = `
       <div class="permission-matrix-wrap" id="permissionMatrixWrap"></div>
     </section>
   </main>
+
+      <div class="schedule-modal-backdrop" id="addTaskProjectModalBackdrop" hidden>
+        <div class="schedule-modal add-task-project-modal" role="dialog" aria-modal="true" aria-labelledby="addTaskProjectModalTitle">
+          <div class="schedule-modal-header">
+            <h3 id="addTaskProjectModalTitle">Choose project</h3>
+            <button type="button" class="schedule-modal-close" id="addTaskProjectModalClose" aria-label="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="schedule-modal-body">
+            <p class="add-task-project-help">Pick which project this task belongs to. The project filter will switch to it after you continue.</p>
+            <label class="schedule-field">
+              <span>Project</span>
+              <select id="addTaskProjectSelect" aria-label="Project for new task"></select>
+            </label>
+            <p class="form-feedback" id="addTaskProjectFeedback" role="status" aria-live="polite"></p>
+          </div>
+          <div class="schedule-modal-actions">
+            <div class="schedule-modal-actions-right">
+              <button type="button" class="btn-secondary" id="addTaskProjectCancelBtn">Cancel</button>
+              <button type="button" class="btn-primary" id="addTaskProjectContinueBtn">Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 `;

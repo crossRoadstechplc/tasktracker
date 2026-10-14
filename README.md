@@ -2,6 +2,10 @@
 
 Next.js **Task Operations** UI for Workforce. Browser calls this app’s `/api/*` BFF; the BFF proxies to **workforce-backend** `/api/v1/task-tracker/*` (workforce JWT cookies). Deploy the UI to **Vercel**; the API/DB stay on workforce-backend.
 
+## People model
+
+Team Members are **synced from Workforce** (active employees, office admins, and org admins). Do not invite from the tracker — add people in Workforce and they appear automatically. Tracker **Permission Role** (Junior Staff → Super Admin) is independent of Workforce roles (Employee / Office Admin / Org Admin). Assign projects so members can see tasks.
+
 ## Local setup
 
 1. Copy `.env.example` to `.env` and set `BACKEND_API_BASE_URL` to your local workforce API (`http://localhost:4000/api/v1`).
@@ -34,7 +38,7 @@ Live updates use **Server-Sent Events** at `GET /api/events` (cookie session req
 | Trash | `POST /api/trash/:trashId/restore` |
 | Schedule | `POST/PATCH/DELETE /api/schedule/:id` |
 | Projects / org teams | CRUD + members |
-| Staff | `invite`, `PATCH/DELETE /api/staff/:id`, `role`, `resend-invite` |
+| Staff | role only (`PATCH /api/staff/:id/role`); invite/create/delete retired — people sync from Workforce |
 | Permissions | `PUT /api/permissions` |
 
 `GET /api/workspace` returns the legacy flat document. Workspace revision is in `ETag` / `X-Workspace-Revision` headers.

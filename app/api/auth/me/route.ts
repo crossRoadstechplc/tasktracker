@@ -50,7 +50,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Task Operations is not enabled for your organization, or you are not a member yet.",
+          "Could not open Task Operations for this Workforce account. Make sure you belong to an organization.",
       },
       { status: 403 },
     );

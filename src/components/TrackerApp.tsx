@@ -11,6 +11,73 @@ type LoadState =
   | { status: "ready"; data: WorkspaceData | null; authUser: AuthUserResponse; workspaceRevision: number }
   | { status: "error"; message: string };
 
+type BootPayload = {
+  authUser: AuthUserResponse;
+  data: WorkspaceData | null;
+  workspaceRevision: number;
+};
+
+/** Deduplicate React Strict Mode / remount double-fetches of the heavy workspace payload. */
+let bootPromise: Promise<BootPayload> | null = null;
+
+async function loadBootPayload(): Promise<BootPayload> {
+  if (bootPromise) return bootPromise;
+
+  bootPromise = (async () => {
+    const fetchOptions: RequestInit = { cache: "no-store", credentials: "include" };
+
+    const authResponse = await fetch("/api/auth/me", fetchOptions);
+    if (authResponse.status === 401) {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
+        () => undefined,
+      );
+      window.location.replace("/login");
+      throw new Error("Unauthorized");
+    }
+    if (!authResponse.ok) {
+      throw new Error("Could not verify your session.");
+    }
+
+    const authUser = (await authResponse.json()) as AuthUserResponse;
+    const workspaceResponse = await fetch("/api/workspace", fetchOptions);
+
+    if (workspaceResponse.status === 401) {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
+        () => undefined,
+      );
+      window.location.replace("/login");
+      throw new Error("Unauthorized");
+    }
+
+    if (workspaceResponse.ok) {
+      const data = (await workspaceResponse.json()) as WorkspaceData;
+      const revisionHeader = workspaceResponse.headers.get("X-Workspace-Revision");
+      const workspaceRevision = revisionHeader ? Number.parseInt(revisionHeader, 10) : 0;
+      return {
+        authUser,
+        data,
+        workspaceRevision: Number.isFinite(workspaceRevision) ? workspaceRevision : 0,
+      };
+    }
+
+    if (workspaceResponse.status === 404) {
+      return { authUser, data: null, workspaceRevision: 0 };
+    }
+
+    const payload = (await workspaceResponse.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(payload?.error ?? `Failed to load workspace (${workspaceResponse.status}).`);
+  })();
+
+  try {
+    return await bootPromise;
+  } catch (error) {
+    bootPromise = null;
+    throw error;
+  }
+}
+
 export function TrackerApp() {
   const rootRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
@@ -21,61 +88,17 @@ export function TrackerApp() {
 
     async function loadAppData() {
       try {
-        const fetchOptions: RequestInit = { cache: "no-store", credentials: "include" };
-
-        const authResponse = await fetch("/api/auth/me", fetchOptions);
+        const boot = await loadBootPayload();
         if (cancelled) return;
-
-        if (authResponse.status === 401) {
-          await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
-            () => undefined,
-          );
-          window.location.replace("/login");
-          return;
-        }
-
-        if (!authResponse.ok) {
-          throw new Error("Could not verify your session.");
-        }
-
-        const authUser = (await authResponse.json()) as AuthUserResponse;
-        const workspaceResponse = await fetch("/api/workspace", fetchOptions);
-        if (cancelled) return;
-
-        if (workspaceResponse.status === 401) {
-          await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
-            () => undefined,
-          );
-          window.location.replace("/login");
-          return;
-        }
-
-        if (workspaceResponse.ok) {
-          const data = (await workspaceResponse.json()) as WorkspaceData;
-          const revisionHeader = workspaceResponse.headers.get("X-Workspace-Revision");
-          const workspaceRevision = revisionHeader
-            ? Number.parseInt(revisionHeader, 10)
-            : 0;
-          setLoadState({
-            status: "ready",
-            data,
-            authUser,
-            workspaceRevision: Number.isFinite(workspaceRevision) ? workspaceRevision : 0,
-          });
-          return;
-        }
-
-        if (workspaceResponse.status === 404) {
-          setLoadState({ status: "ready", data: null, authUser, workspaceRevision: 0 });
-          return;
-        }
-
-        const payload = (await workspaceResponse.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(payload?.error ?? `Failed to load workspace (${workspaceResponse.status}).`);
+        setLoadState({
+          status: "ready",
+          data: boot.data,
+          authUser: boot.authUser,
+          workspaceRevision: boot.workspaceRevision,
+        });
       } catch (error) {
         if (cancelled) return;
+        if (error instanceof Error && error.message === "Unauthorized") return;
         const message =
           error instanceof Error ? error.message : "Could not load the task tracker.";
         setLoadState({ status: "error", message });

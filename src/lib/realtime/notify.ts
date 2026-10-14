@@ -46,7 +46,8 @@ export async function publishWorkspaceEvent(
 
   await prisma.$executeRaw`SELECT pg_notify(${NOTIFY_CHANNEL}, ${payload})`;
 
-  fanOut(event);
+  // Fan-out only via the LISTEN client below. Calling fanOut here as well
+  // delivered every event twice to SSE clients in the same process.
   return event;
 }
 

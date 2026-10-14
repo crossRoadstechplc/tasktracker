@@ -75,6 +75,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       let orgTeamIds = { ...(preloadData?.orgTeamIds ?? {}) };
       let staffIds = { ...(preloadData?.staffIds ?? {}) };
 
+      // Shared drag state — declare early so reload/render never hits TDZ.
+      const reorderState = {
+        staff: { dragged: "" },
+        project: { dragged: "" },
+        orgTeam: { dragged: "" }
+      };
+
       applyPreloadedWorkspace(preloadData);
 
       // Captured before startup saves run, so they reflect the browser's state on load.
@@ -195,10 +202,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         { id: "teams.delete", group: "Teams", label: "Delete teams" },
         { id: "teams.manageMembers", group: "Teams", label: "Manage team membership" },
 
-        { id: "staff.create", group: "Team Members", label: "Add team members" },
-        { id: "staff.edit", group: "Team Members", label: "Edit team member name/job title" },
-        { id: "staff.delete", group: "Team Members", label: "Remove team members" },
-        { id: "staff.assignRole", group: "Team Members", label: "Assign permission role to a team member" },
+        { id: "staff.create", group: "Team Members", label: "Add team members (retired — Workforce sync)" },
+        { id: "staff.edit", group: "Team Members", label: "Edit team member profile (retired — Workforce owned)" },
+        { id: "staff.delete", group: "Team Members", label: "Remove team members (retired — Workforce owned)" },
+        { id: "staff.assignRole", group: "Team Members", label: "Assign Task Operations permission role" },
 
         { id: "schedule.create", group: "Schedule", label: "Create schedule events" },
         { id: "schedule.edit", group: "Schedule", label: "Edit, move, or resize schedule events" },
@@ -206,6 +213,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
         { id: "backup.export", group: "Backup", label: "Export a backup file" },
         { id: "backup.import", group: "Backup", label: "Import a backup file" },
+
+        { id: "activity.viewOngoing", group: "Activity", label: "View Ongoing activity for assigned projects (like Completed / Deleted)" },
 
         { id: "settings.editPermissions", group: "Settings", label: "Edit the permission matrix" }
       ];
@@ -223,6 +232,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "staff.create": true, "staff.edit": true, "staff.delete": true, "staff.assignRole": true,
           "schedule.create": true, "schedule.edit": true, "schedule.delete": true,
           "backup.export": true, "backup.import": true,
+          "activity.viewOngoing": true,
           "settings.editPermissions": true
         },
         "Lead": {
@@ -233,6 +243,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "staff.create": false, "staff.edit": false, "staff.delete": false, "staff.assignRole": false,
           "schedule.create": true, "schedule.edit": true, "schedule.delete": true,
           "backup.export": true, "backup.import": false,
+          "activity.viewOngoing": true,
           "settings.editPermissions": false
         },
         "Senior Staff": {
@@ -243,6 +254,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "staff.create": false, "staff.edit": false, "staff.delete": false, "staff.assignRole": false,
           "schedule.create": true, "schedule.edit": true, "schedule.delete": false,
           "backup.export": true, "backup.import": false,
+          "activity.viewOngoing": true,
           "settings.editPermissions": false
         },
         "Junior Staff": {
@@ -253,6 +265,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "staff.create": false, "staff.edit": false, "staff.delete": false, "staff.assignRole": false,
           "schedule.create": false, "schedule.edit": false, "schedule.delete": false,
           "backup.export": false, "backup.import": false,
+          "activity.viewOngoing": true,
           "settings.editPermissions": false
         }
       };
@@ -356,6 +369,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             permissionMatrix[role][action.id] = Boolean(DEFAULT_PERMISSION_MATRIX[role]?.[action.id]);
           }
         });
+        // Older Admin-only Ongoing defaults blocked assigned staff from seeing
+        // their own projects. Align with Completed / Deleted: everyone can view.
+        if (role !== "Super Admin" && permissionMatrix[role]["activity.viewOngoing"] === false) {
+          permissionMatrix[role]["activity.viewOngoing"] = true;
+        }
       });
 
       // Backfill permissionRole on profiles that predate this feature (or have
@@ -434,11 +452,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         renderStaffManager();
         renderOrgTeamManager();
         renderTeamManager();
+        updateOngoingCount();
         if (!skipSettings && settingsView.classList.contains("active")) {
           renderSettingsView();
         }
         if (scheduleView.classList.contains("active")) {
           renderScheduleView({ preserveScroll: true });
+        }
+        if (ongoingView.classList.contains("active")) {
+          renderOngoingActivity();
         }
       }
 
@@ -529,6 +551,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       });
 
       let currentFilter = "All";
+      let pendingAddTaskStatus = "";
       let currentOrgTeamFilter = "All";
       let currentStaffFilter = "All";
       let currentScheduleProjectFilter = "All";
@@ -558,12 +581,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const trashCount = document.getElementById("trashCount");
       const completedTasksList = document.getElementById("completedTasksList");
       const archivedCount = document.getElementById("archivedCount");
+      const ongoingCount = document.getElementById("ongoingCount");
+      const ongoingSummary = document.getElementById("ongoingSummary");
+      const ongoingList = document.getElementById("ongoingList");
+      const ongoingSearch = document.getElementById("ongoingSearch");
+      const ongoingDeptFilter = document.getElementById("ongoingDeptFilter");
+      const ongoingNavBtn = document.getElementById("ongoingNavBtn");
       const staffManagerList = document.getElementById("staffManagerList");
-      const newStaffFirstName = document.getElementById("newStaffFirstName");
-      const newStaffLastName = document.getElementById("newStaffLastName");
-      const newStaffEmail = document.getElementById("newStaffEmail");
-      const newStaffRole = document.getElementById("newStaffRole");
-      const newStaffPermissionRole = document.getElementById("newStaffPermissionRole");
       const staffFormFeedback = document.getElementById("staffFormFeedback");
 
       const tasksView = document.getElementById("tasksView");
@@ -572,6 +596,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const teamsView = document.getElementById("teamsView");
       const trashView = document.getElementById("trashView");
       const completedTasksView = document.getElementById("completedTasksView");
+      const ongoingView = document.getElementById("ongoingView");
       const settingsView = document.getElementById("settingsView");
       const permissionMatrixWrap = document.getElementById("permissionMatrixWrap");
       const resetPermissionsBtn = document.getElementById("resetPermissionsBtn");
@@ -579,6 +604,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const permissionSaveStatus = document.getElementById("permissionSaveStatus");
       const scheduleView = document.getElementById("scheduleView");
       const scheduleNavBtn = document.getElementById("scheduleNavBtn");
+      const addTaskProjectModalBackdrop = document.getElementById("addTaskProjectModalBackdrop");
+      const addTaskProjectSelect = document.getElementById("addTaskProjectSelect");
+      const addTaskProjectFeedback = document.getElementById("addTaskProjectFeedback");
+      const addTaskProjectContinueBtn = document.getElementById("addTaskProjectContinueBtn");
+      const addTaskProjectCancelBtn = document.getElementById("addTaskProjectCancelBtn");
+      const addTaskProjectModalClose = document.getElementById("addTaskProjectModalClose");
       const scheduleTodayBtn = document.getElementById("scheduleTodayBtn");
       const schedulePrevBtn = document.getElementById("schedulePrevBtn");
       const scheduleNextBtn = document.getElementById("scheduleNextBtn");
@@ -893,9 +924,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
       }
 
-      function save() {
+      function persistTasksLocally() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
         localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+      }
+
+      function save(dirtyTaskId) {
+        persistTasksLocally();
+        // Only PATCH tasks the user actually edited. Moves/deletes use dedicated endpoints.
+        if (dirtyTaskId) trackerSync.markTasksDirty(dirtyTaskId);
         trackerSync.scheduleTaskSync();
       }
 
@@ -918,6 +955,295 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function updateArchivedCount() {
         archivedCount.textContent = archivedTasks.length;
+      }
+
+      function getOpenTasks() {
+        return tasks.filter(task => task.status !== "Done");
+      }
+
+      function updateOngoingCount() {
+        if (!ongoingCount) return;
+        ongoingCount.textContent = String(getOpenTasks().length);
+      }
+
+      function buildOngoingProjectActivity() {
+        const me = getCurrentUser()?.name || currentUserName || "";
+        const canSeeEveryone =
+          getCurrentUserRole() === "Super Admin" || getCurrentUserRole() === "Admin";
+        const openTasks = getOpenTasks();
+        // Same visibility as Completed / Deleted: only projects already on your board
+        // (assigned membership). Admins see everyone; staff see their own stats first.
+        const projectNames = [...new Set(openTasks.map(task => task.team || "Unassigned"))]
+          .sort((a, b) => {
+            if (a === "Unassigned") return 1;
+            if (b === "Unassigned") return -1;
+            return a.localeCompare(b);
+          });
+
+        return projectNames.map(projectName => {
+          const projectTasks = tasks.filter(task => (task.team || "Unassigned") === projectName);
+          const openProjectTasks = projectTasks.filter(task => task.status !== "Done");
+          const doneProjectTasks = projectTasks.filter(task => task.status === "Done");
+          const progress = projectTasks.length
+            ? Math.round((doneProjectTasks.length / projectTasks.length) * 100)
+            : 0;
+
+          let ownerNames = [...new Set(openProjectTasks.flatMap(task => taskOwners(task)))]
+            .sort((a, b) => a.localeCompare(b));
+          if (!canSeeEveryone && me) {
+            const mine = ownerNames.filter(name => name === me);
+            // Prefer your own open work; if you have none on this project yet,
+            // still show teammates so assigned projects are not empty.
+            if (mine.length) ownerNames = mine;
+          }
+
+          const people = ownerNames.map(name => {
+            const ownedInProject = projectTasks.filter(task => taskOwners(task).includes(name));
+            const openOwned = ownedInProject.filter(task => task.status !== "Done");
+            const doneOwned = ownedInProject.filter(task => task.status === "Done").length;
+            const profile = staffProfiles[name] || {};
+            const department = String(profile.department || "").trim() || "No department";
+            return {
+              name,
+              role: profile.role || "",
+              department,
+              openCount: openOwned.length,
+              inProgressCount: openOwned.filter(task => task.status === "In Progress").length,
+              todoCount: openOwned.filter(task => task.status === "To Do").length,
+              doneCount: doneOwned,
+              totalCount: ownedInProject.length,
+              progress: ownedInProject.length
+                ? Math.round((doneOwned / ownedInProject.length) * 100)
+                : 0,
+              openTasks: openOwned.sort((a, b) => {
+                if (a.status === b.status) return (a.title || "").localeCompare(b.title || "");
+                return a.status === "In Progress" ? -1 : 1;
+              }),
+            };
+          }).filter(person => person.openCount > 0)
+            .sort((a, b) => a.progress - b.progress || a.name.localeCompare(b.name));
+
+          return {
+            name: projectName,
+            openCount: openProjectTasks.length,
+            inProgressCount: openProjectTasks.filter(task => task.status === "In Progress").length,
+            todoCount: openProjectTasks.filter(task => task.status === "To Do").length,
+            doneCount: doneProjectTasks.length,
+            totalCount: projectTasks.length,
+            progress,
+            people,
+          };
+        }).filter(project => project.people.length > 0);
+      }
+
+      function renderOngoingActivity() {
+        if (!ongoingList || !ongoingSummary) return;
+
+        const projects = buildOngoingProjectActivity();
+        const openTasks = getOpenTasks();
+        const activePeople = new Set(
+          projects.flatMap(project => project.people.map(person => person.name))
+        );
+        const avgProgress = projects.length
+          ? Math.round(projects.reduce((sum, project) => sum + project.progress, 0) / projects.length)
+          : 0;
+
+        const search = String(ongoingSearch?.value || "").trim().toLowerCase();
+        const deptFilter = ongoingDeptFilter?.value || "All";
+
+        if (ongoingDeptFilter) {
+          const selected = deptFilter;
+          const departments = [...new Set(
+            projects.flatMap(project => project.people.map(person => person.department))
+          )].sort((a, b) => {
+            if (a === "No department") return 1;
+            if (b === "No department") return -1;
+            return a.localeCompare(b);
+          });
+          ongoingDeptFilter.innerHTML = `<option value="All">All departments</option>${departments
+            .map(dept => `<option value="${escapeHtml(dept)}">${escapeHtml(dept)}</option>`)
+            .join("")}`;
+          ongoingDeptFilter.value = departments.includes(selected) || selected === "All" ? selected : "All";
+        }
+
+        const selectedDept = ongoingDeptFilter?.value || "All";
+        const visibleProjects = projects
+          .map(project => {
+            const people = project.people.filter(person => {
+              const matchesDept = selectedDept === "All" || person.department === selectedDept;
+              if (!matchesDept) return false;
+              if (!search) return true;
+              const haystack = [
+                project.name,
+                person.name,
+                person.role,
+                person.department,
+                ...person.openTasks.map(task => task.title || ""),
+              ]
+                .join(" ")
+                .toLowerCase();
+              return haystack.includes(search);
+            });
+            const openCount = people.reduce((sum, person) => sum + person.openCount, 0);
+            const inProgressCount = people.reduce((sum, person) => sum + person.inProgressCount, 0);
+            const doneCount = people.reduce((sum, person) => sum + person.doneCount, 0);
+            const totalCount = people.reduce((sum, person) => sum + person.totalCount, 0);
+            return {
+              ...project,
+              people,
+              openCount,
+              inProgressCount,
+              doneCount,
+              totalCount,
+              progress: totalCount ? Math.round((doneCount / totalCount) * 100) : 0,
+            };
+          })
+          .filter(project => project.people.length > 0);
+
+        ongoingSummary.innerHTML = `
+          <article class="ongoing-summary-card">
+            <span class="ongoing-summary-label">Projects in flight</span>
+            <strong class="ongoing-summary-value">${projects.length}</strong>
+          </article>
+          <article class="ongoing-summary-card">
+            <span class="ongoing-summary-label">People active</span>
+            <strong class="ongoing-summary-value">${activePeople.size}</strong>
+          </article>
+          <article class="ongoing-summary-card">
+            <span class="ongoing-summary-label">Open tasks</span>
+            <strong class="ongoing-summary-value">${openTasks.length}</strong>
+          </article>
+          <article class="ongoing-summary-card">
+            <span class="ongoing-summary-label">Avg progress</span>
+            <strong class="ongoing-summary-value">${avgProgress}%</strong>
+          </article>
+        `;
+
+        ongoingList.innerHTML = "";
+
+        if (!visibleProjects.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = projects.length
+            ? "No projects match this search or department filter."
+            : "No ongoing work right now. Open tasks will appear here by project, then by employee.";
+          ongoingList.appendChild(empty);
+          updateOngoingCount();
+          return;
+        }
+
+        visibleProjects.forEach(project => {
+          const card = document.createElement("article");
+          card.className = "ongoing-project-card is-collapsed";
+
+          const header = document.createElement("button");
+          header.type = "button";
+          header.className = "ongoing-project-card-header";
+          header.setAttribute("aria-expanded", "false");
+
+          const identity = document.createElement("div");
+          identity.className = "ongoing-project-identity";
+          identity.innerHTML = `
+            <strong class="ongoing-project-card-name">${escapeHtml(project.name)}</strong>
+            <span class="ongoing-project-card-meta">${project.doneCount}/${project.totalCount} tasks done</span>
+          `;
+
+          const stats = document.createElement("div");
+          stats.className = "ongoing-person-stats";
+          stats.innerHTML = `
+            <span class="ongoing-person-stat">${project.people.length} people</span>
+            <span class="ongoing-person-stat">${project.openCount} open</span>
+            <span class="ongoing-person-stat">${project.inProgressCount} in progress</span>
+          `;
+
+          const progressWrap = document.createElement("div");
+          progressWrap.className = "ongoing-progress";
+          progressWrap.innerHTML = `
+            <div class="ongoing-progress-track" aria-hidden="true">
+              <div class="ongoing-progress-fill" style="width:${project.progress}%"></div>
+            </div>
+            <span class="ongoing-progress-label">${project.progress}%</span>
+          `;
+
+          const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          chevron.setAttribute("class", "ongoing-person-chevron");
+          chevron.setAttribute("viewBox", "0 0 24 24");
+          chevron.setAttribute("aria-hidden", "true");
+          const chevronPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          chevronPath.setAttribute("d", "M6 9.5 12 15l6-5.5");
+          chevronPath.setAttribute("fill", "none");
+          chevronPath.setAttribute("stroke", "currentColor");
+          chevronPath.setAttribute("stroke-width", "2");
+          chevronPath.setAttribute("stroke-linecap", "round");
+          chevronPath.setAttribute("stroke-linejoin", "round");
+          chevron.appendChild(chevronPath);
+
+          header.appendChild(identity);
+          header.appendChild(stats);
+          header.appendChild(progressWrap);
+          header.appendChild(chevron);
+
+          const detail = document.createElement("div");
+          detail.className = "ongoing-project-detail";
+          detail.hidden = true;
+
+          project.people.forEach(person => {
+            const personBlock = document.createElement("section");
+            personBlock.className = "ongoing-employee-block";
+
+            personBlock.innerHTML = `
+              <div class="ongoing-employee-header">
+                <div class="ongoing-person-identity">
+                  <strong class="ongoing-person-name">${escapeHtml(person.name)}</strong>
+                  <span class="ongoing-person-meta">${escapeHtml(
+                    [person.role || "No job title", person.department].filter(Boolean).join(" · ")
+                  )}</span>
+                </div>
+                <div class="ongoing-person-stats">
+                  <span class="ongoing-person-stat">${person.openCount} open</span>
+                  <span class="ongoing-person-stat">${person.inProgressCount} in progress</span>
+                </div>
+                <div class="ongoing-progress ongoing-progress-compact">
+                  <div class="ongoing-progress-track" aria-hidden="true">
+                    <div class="ongoing-progress-fill" style="width:${person.progress}%"></div>
+                  </div>
+                  <span class="ongoing-progress-label">${person.progress}%</span>
+                </div>
+              </div>
+            `;
+
+            const taskList = document.createElement("ul");
+            taskList.className = "ongoing-task-list";
+            person.openTasks.forEach(task => {
+              const item = document.createElement("li");
+              item.className = "ongoing-task-item";
+              item.innerHTML = `
+                <span class="ongoing-task-status ongoing-task-status-${String(task.status || "")
+                  .toLowerCase()
+                  .replace(/\s+/g, "-")}">${escapeHtml(displayStatusLabel(task.status))}</span>
+                <span class="ongoing-task-title">${escapeHtml(task.title || "Untitled task")}</span>
+                <span class="ongoing-task-meta">${task.due ? `Due ${escapeHtml(task.due)}` : "No due date"} · ${escapeHtml(task.priority || "Low")}</span>
+              `;
+              taskList.appendChild(item);
+            });
+
+            personBlock.appendChild(taskList);
+            detail.appendChild(personBlock);
+          });
+
+          header.addEventListener("click", () => {
+            const willExpand = card.classList.contains("is-collapsed");
+            card.classList.toggle("is-collapsed", !willExpand);
+            detail.hidden = !willExpand;
+            header.setAttribute("aria-expanded", willExpand ? "true" : "false");
+          });
+
+          card.appendChild(header);
+          card.appendChild(detail);
+          ongoingList.appendChild(card);
+        });
+
+        updateOngoingCount();
       }
 
       function formatDeletedAt(value) {
@@ -1218,8 +1544,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         const profile = staffProfiles[name] || { role: "" };
         const memberships = orgTeamsForStaff(name);
         return [
-          profile.role || "No role set",
-          memberships.length ? memberships.join(", ") : "No teams"
+          profile.role || "No job title",
+          profile.department || "No department",
+          memberships.length ? memberships.join(", ") : "No org teams"
         ].join(" · ");
       }
 
@@ -1237,13 +1564,18 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function renderStaffManager() {
         staffManagerList.innerHTML = "";
-        staffManagerList.classList.add("staff-table");
+        staffManagerList.classList.add("staff-table", "staff-directory-table");
 
         const header = document.createElement("div");
         header.className = "staff-table-header";
         header.innerHTML = `
-          <div>Team Member</div>
-          <div>Actions</div>
+          <div>Name</div>
+          <div>Email</div>
+          <div>Job title</div>
+          <div>Dept</div>
+          <div>Office</div>
+          <div>Workforce</div>
+          <div>Permission</div>
         `;
         staffManagerList.appendChild(header);
 
@@ -1251,607 +1583,132 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           const profile = staffProfiles[name] || {
             ...splitStaffName(name),
             role: "",
-            permissionRole: DEFAULT_STAFF_PERMISSION_ROLE
+            permissionRole: DEFAULT_STAFF_PERMISSION_ROLE,
+            email: "",
+            department: "",
+            office: "",
+            workforceRole: "Employee",
+            employeeCode: ""
           };
 
           const row = document.createElement("div");
-          row.className = "staff-row";
+          row.className = "staff-row staff-directory-row";
+
+          function cell(text, className) {
+            const el = document.createElement("div");
+            el.className = `staff-cell ${className || ""}`.trim();
+            el.textContent = text || "—";
+            if (text) el.title = text;
+            return el;
+          }
 
           const nameCell = document.createElement("div");
           nameCell.className = "staff-cell staff-name-cell";
-
-          const dragHandle = createReorderHandle(`Drag to reorder ${name}`);
-
-          const displayWrap = document.createElement("div");
-          displayWrap.className = "staff-display-wrap";
-
+          const nameWrap = document.createElement("div");
+          nameWrap.className = "staff-display-wrap";
           const displayName = document.createElement("div");
           displayName.className = "staff-display-name";
           displayName.textContent = name;
-
-          const displayRole = document.createElement("div");
-          displayRole.className = "staff-display-role";
-          displayRole.textContent = staffMetaLabel(name);
-
-          displayWrap.appendChild(displayName);
-          displayWrap.appendChild(displayRole);
-
-          const isPendingInvite = profile.inviteStatus === "pending";
-          if (isPendingInvite) {
-            row.classList.add("staff-row-pending");
-            const pendingBadge = document.createElement("span");
-            pendingBadge.className = "staff-pending-badge";
-            pendingBadge.textContent = "Pending";
-            pendingBadge.title = "Waiting for this person to accept the invite and set a password";
-            displayWrap.appendChild(pendingBadge);
+          displayName.title = name;
+          nameWrap.appendChild(displayName);
+          if (profile.employeeCode) {
+            const meta = document.createElement("div");
+            meta.className = "staff-display-role";
+            meta.textContent = profile.employeeCode;
+            meta.title = `Employee code ${profile.employeeCode}`;
+            nameWrap.appendChild(meta);
           }
+          nameCell.appendChild(nameWrap);
 
-          nameCell.appendChild(dragHandle);
-          nameCell.appendChild(displayWrap);
+          row.appendChild(nameCell);
+          row.appendChild(cell(profile.email || "", "staff-email-cell"));
+          row.appendChild(cell(profile.role || "", "staff-job-cell"));
+          row.appendChild(cell(profile.department || "", "staff-dept-cell"));
+          row.appendChild(cell(profile.office || "", "staff-office-cell"));
+          row.appendChild(cell(profile.workforceRole || "Employee", "staff-workforce-role-cell"));
 
-          const actions = document.createElement("div");
-          actions.className = "staff-cell staff-row-actions";
-
-          const configureBtn = document.createElement("button");
-          configureBtn.type = "button";
-          configureBtn.className = "staff-configure-btn";
-          configureBtn.textContent = "Configure";
-          configureBtn.dataset.permission = "staff.edit";
-          if (isPendingInvite) {
-            configureBtn.disabled = true;
-            configureBtn.title = "Available after they accept the invite and set a password";
-            configureBtn.classList.add("is-disabled");
-          }
-
-          const saveBtn = document.createElement("button");
-          saveBtn.type = "button";
-          saveBtn.className = "save-team-btn staff-config-save";
-          saveBtn.textContent = "Save";
-          saveBtn.hidden = true;
-
-          const removeBtn = document.createElement("button");
-          removeBtn.type = "button";
-          removeBtn.className = "danger-btn";
-          removeBtn.textContent = "Remove";
-          removeBtn.dataset.permission = "staff.delete";
-
-          const profilePanel = document.createElement("div");
-          profilePanel.className = "staff-profile-panel";
-          profilePanel.hidden = true;
-
-          const profileGrid = document.createElement("div");
-          profileGrid.className = "staff-profile-grid";
-
-          function makeProfileField(labelText, value, className) {
-            const field = document.createElement("label");
-            field.className = "staff-profile-field";
-
-            const label = document.createElement("span");
-            label.textContent = labelText;
-
-            const input = document.createElement("input");
-            input.className = className;
-            input.value = value || "";
-            input.autocomplete = "off";
-            input.dataset.permission = "staff.edit";
-            input.dataset.permissionMode = "disable";
-
-            field.appendChild(label);
-            field.appendChild(input);
-
-            return { field, input };
-          }
-
-          function makePermissionRoleField(value) {
-            const field = document.createElement("label");
-            field.className = "staff-profile-field";
-
-            const label = document.createElement("span");
-            label.textContent = "Permission Role";
-
-            const select = document.createElement("select");
-            select.className = "staff-profile-permission-role";
-            select.dataset.permission = "staff.assignRole";
-            select.dataset.permissionMode = "disable";
-            PERMISSION_ROLES.forEach(role => {
-              const option = document.createElement("option");
-              option.value = role;
-              option.textContent = role;
-              if (role === value) option.selected = true;
-              select.appendChild(option);
-            });
-
-            field.appendChild(label);
-            field.appendChild(select);
-
-            return { field, select };
-          }
-
-          const firstNameField = makeProfileField("First Name", profile.firstName, "staff-profile-first");
-          const lastNameField = makeProfileField("Last Name", profile.lastName, "staff-profile-last");
-          const roleField = makeProfileField("Role", profile.role, "staff-profile-role");
-          const permissionRoleField = makePermissionRoleField(
-            PERMISSION_ROLES.includes(profile.permissionRole) ? profile.permissionRole : DEFAULT_STAFF_PERMISSION_ROLE
-          );
-
-          profileGrid.appendChild(firstNameField.field);
-          profileGrid.appendChild(lastNameField.field);
-          profileGrid.appendChild(roleField.field);
-          profileGrid.appendChild(permissionRoleField.field);
-          profilePanel.appendChild(profileGrid);
-
-          configureBtn.addEventListener("click", () => {
-            if (isPendingInvite || !can("staff.edit")) return;
-            profilePanel.hidden = false;
-            configureBtn.hidden = true;
-            saveBtn.hidden = false;
-            requestAnimationFrame(() => firstNameField.input.focus());
+          const roleCell = document.createElement("div");
+          roleCell.className = "staff-cell staff-permission-cell";
+          const select = document.createElement("select");
+          select.className = "staff-profile-permission-role";
+          select.setAttribute("aria-label", `Permission role for ${name}`);
+          select.dataset.permission = "staff.assignRole";
+          select.dataset.permissionMode = "disable";
+          const currentRole = PERMISSION_ROLES.includes(profile.permissionRole)
+            ? profile.permissionRole
+            : DEFAULT_STAFF_PERMISSION_ROLE;
+          PERMISSION_ROLES.forEach(role => {
+            const option = document.createElement("option");
+            option.value = role;
+            option.textContent = role;
+            if (role === currentRole) option.selected = true;
+            select.appendChild(option);
           });
+          if (!can("staff.assignRole")) select.disabled = true;
 
-          saveBtn.addEventListener("click", async () => {
-            if (!can("staff.edit")) return;
-            const firstName = firstNameField.input.value.trim();
-            const lastName = lastNameField.input.value.trim();
-            const role = roleField.input.value.trim();
-            const nextPermissionRole = permissionRoleField.select.value;
-
-            const newName = [firstName, lastName].filter(Boolean).join(" ").trim();
-
-            if (!newName) {
-              firstNameField.input.focus();
+          select.addEventListener("change", async () => {
+            if (!can("staff.assignRole")) {
+              select.value = currentRole;
               return;
             }
-
+            const nextPermissionRole = select.value;
             const wasLastSuperAdmin = profile.permissionRole === "Super Admin" &&
               nextPermissionRole !== "Super Admin" &&
               staff.filter(n => n !== name).every(n => staffProfiles[n]?.permissionRole !== "Super Admin");
-
             if (wasLastSuperAdmin && !confirm(
               `${name} is the only Super Admin. Removing this role means no one will be able to reach Settings unless another Super Admin is assigned first. Continue?`
             )) {
+              select.value = currentRole;
               return;
             }
-
-            const duplicate = staff.some(memberName =>
-              memberName !== name && memberName.toLowerCase() === newName.toLowerCase()
-            );
-
-            if (duplicate) {
-              firstNameField.input.focus();
-              return;
-            }
-
             const staffId = staffIds[name];
             if (!staffId) {
               window.alert("Could not save — team member id missing. Refresh and try again.");
+              select.value = currentRole;
               return;
             }
-
-            saveBtn.disabled = true;
+            select.disabled = true;
             try {
-              await settingsSync.updateStaffProfile(staffId, {
-                firstName,
-                lastName,
-                jobTitle: role,
-                displayName: newName,
-              });
-              if (nextPermissionRole !== profile.permissionRole) {
-                if (!can("staff.assignRole")) {
-                  window.alert("You do not have permission to change permission roles.");
-                  return;
-                }
-                await settingsSync.updateStaffRole(staffId, nextPermissionRole);
-              }
-            } catch (error) {
-              console.error("Staff save failed.", error);
-              saveBtn.disabled = false;
-              window.alert(error instanceof Error ? error.message : "Could not save team member.");
-              return;
-            }
-            saveBtn.disabled = false;
-
-            if (newName !== name) {
-              staff = staff.map(memberName => memberName === name ? newName : memberName);
-
-              tasks = tasks.map(task => {
-                const owners = taskOwners(task).map(ownerName =>
-                  ownerName === name ? newName : ownerName
-                );
-                return taskWithOwners(task, owners);
-              });
-
-              Object.keys(teamMembers).forEach(teamName => {
-                teamMembers[teamName] = (teamMembers[teamName] || []).map(member =>
-                  member === name ? newName : member
-                );
-
-                if (teamLeaders[teamName] === name) {
-                  teamLeaders[teamName] = newName;
-                }
-              });
-
-              Object.keys(orgTeamMembers).forEach(orgTeam => {
-                orgTeamMembers[orgTeam] = (orgTeamMembers[orgTeam] || []).map(member =>
-                  member === name ? newName : member
-                );
-              });
-
-              schedule.events = schedule.events.map(event => ({
-                ...event,
-                guests: (event.guests || []).map(guest => guest === name ? newName : guest)
-              }));
-
-              deletedTasks = deletedTasks.map(task => {
-                const owners = taskOwners(task).map(ownerName =>
-                  ownerName === name ? newName : ownerName
-                );
-                return taskWithOwners(task, owners);
-              });
-
-              settingsSync.renameStaffId(name, newName);
-              delete staffProfiles[name];
-            }
-
-            staffProfiles[newName] = {
-              firstName,
-              lastName,
-              role,
-              permissionRole: nextPermissionRole
-            };
-
-            saveStaffProfiles();
-            saveTeamMembers();
-            saveTeamLeaders();
-            saveOrgTeamMembers();
-            saveSchedule();
-            save();
-
-            if (currentStaffFilter === name) {
-              currentStaffFilter = newName;
-            }
-
-            const editedCurrentUser = currentUserName === name;
-            if (editedCurrentUser) currentUserName = newName;
-
-            populateStaffFilter();
-            populateCurrentUserSelect();
-            staffFilter.value = currentStaffFilter;
-            renderStaffManager();
-            renderScheduleView();
-            render();
-            if (editedCurrentUser) {
-              localStorage.setItem(CURRENT_USER_STORAGE_KEY, currentUserName);
-              onCurrentUserChanged();
-            }
-          });
-
-          [firstNameField.input, lastNameField.input, roleField.input, permissionRoleField.select].forEach(profileInput => {
-            profileInput.addEventListener("keydown", e => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                saveBtn.click();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                profilePanel.hidden = true;
-                saveBtn.hidden = true;
-                configureBtn.hidden = false;
-              }
-            });
-          });
-
-          let removeArmed = false;
-          let resetTimer = null;
-
-          removeBtn.addEventListener("click", async () => {
-            if (!can("staff.delete")) return;
-            const assignedCount = tasks.filter(t => taskOwners(t).includes(name)).length;
-
-            if (!removeArmed) {
-              removeArmed = true;
-              removeBtn.textContent = assignedCount
-                ? `Confirm · unassign ${assignedCount}`
-                : "Confirm";
-
-              resetTimer = setTimeout(() => {
-                removeArmed = false;
-                removeBtn.textContent = "Remove";
-              }, 6000);
-              return;
-            }
-
-            if (resetTimer) clearTimeout(resetTimer);
-
-            removeBtn.disabled = true;
-            removeBtn.textContent = "Removing…";
-
-            try {
-              const staffId = staffIds[name];
-              if (!staffId) {
-                throw new Error("Team member id not found. Refresh and try again.");
-              }
-              await settingsSync.deleteStaffMember(staffId);
-            } catch (error) {
-              console.error("Remove staff failed.", error);
-              removeBtn.disabled = false;
-              removeBtn.textContent = "Remove";
-              removeArmed = false;
-              window.alert(
-                error instanceof Error ? error.message : "Could not remove team member."
-              );
-              return;
-            }
-
-            tasks = tasks.map(task =>
-              taskWithOwners(task, taskOwners(task).filter(ownerName => ownerName !== name))
-            );
-
-            staff = staff.filter(memberName => memberName !== name);
-            delete staffProfiles[name];
-            settingsSync.removeStaffId(name);
-
-            Object.keys(orgTeamMembers).forEach(orgTeam => {
-              orgTeamMembers[orgTeam] = (orgTeamMembers[orgTeam] || []).filter(member => member !== name);
-            });
-
-            Object.keys(teamMembers).forEach(teamName => {
-              teamMembers[teamName] = (teamMembers[teamName] || []).filter(member => member !== name);
-
-              if (teamLeaders[teamName] === name) {
-                teamLeaders[teamName] = "";
-              }
-            });
-
-            schedule.events = schedule.events.map(event => ({
-              ...event,
-              guests: (event.guests || []).filter(guest => guest !== name)
-            }));
-
-            saveStaffProfiles();
-            saveTeamMembers();
-            saveTeamLeaders();
-            saveOrgTeamMembers();
-            saveSchedule();
-            save();
-
-            if (currentStaffFilter === name) {
-              currentStaffFilter = "All";
-            }
-
-            populateStaffFilter();
-            populateCurrentUserSelect();
-            staffFilter.value = currentStaffFilter;
-            renderStaffManager();
-            renderScheduleView();
-            render();
-          });
-
-          attachRowReorder({
-            row,
-            handle: dragHandle,
-            container: staffManagerList,
-            value: name,
-            state: reorderState.staff,
-            getList: () => staff,
-            onReorder: nextList => {
-              staff = nextList;
-              saveStaff();
-              populateStaffFilter();
-              populateCurrentUserSelect();
+              await settingsSync.updateStaffRole(staffId, nextPermissionRole);
+              staffProfiles[name] = {
+                ...staffProfiles[name],
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                role: profile.role,
+                permissionRole: nextPermissionRole,
+                email: profile.email,
+                department: profile.department,
+                office: profile.office,
+                workforceRole: profile.workforceRole,
+                employeeCode: profile.employeeCode
+              };
+              saveStaffProfiles();
+              refreshPermissionsUi();
               renderStaffManager();
               render();
+            } catch (error) {
+              console.error("Permission role save failed.", error);
+              select.value = currentRole;
+              window.alert(error instanceof Error ? error.message : "Could not update permission role.");
+            } finally {
+              select.disabled = !can("staff.assignRole");
             }
           });
 
-          actions.appendChild(configureBtn);
-          actions.appendChild(saveBtn);
-          actions.appendChild(removeBtn);
-
-          row.appendChild(nameCell);
-          row.appendChild(actions);
-          row.appendChild(profilePanel);
+          roleCell.appendChild(select);
+          row.appendChild(roleCell);
           staffManagerList.appendChild(row);
         });
 
         if (!staff.length) {
           const empty = document.createElement("div");
           empty.className = "empty";
-          empty.textContent = "No team members yet. Add the first team member above.";
+          empty.textContent = "No Workforce people synced yet. Add employees in the admin portal — they appear here automatically.";
           staffManagerList.appendChild(empty);
         }
 
         applyPermissionGating();
       }
-
-      function showInviteMessageModal({ message, emailSent, emailError }) {
-        const existing = document.getElementById("inviteMessageModal");
-        if (existing) existing.remove();
-
-        const hint = emailSent
-          ? "Invite email was sent. You can still copy the message below if needed."
-          : (emailError
-            ? `Email was not sent (${emailError}). Copy and send this message manually.`
-            : "Copy and send this message to the new team member.");
-
-        const backdrop = document.createElement("div");
-        backdrop.id = "inviteMessageModal";
-        backdrop.className = "invite-message-backdrop";
-        backdrop.innerHTML = `
-          <div class="invite-message-modal" role="dialog" aria-modal="true" aria-labelledby="inviteMessageTitle">
-            <div class="invite-message-header">
-              <h3 id="inviteMessageTitle">${emailSent ? "Invite emailed" : "Invite created"}</h3>
-              <button type="button" class="invite-message-close" aria-label="Close">×</button>
-            </div>
-            <p class="invite-message-hint"></p>
-            <textarea class="invite-message-text" readonly rows="12"></textarea>
-            <div class="invite-message-actions">
-              <button type="button" class="btn-primary invite-copy-btn">Copy message</button>
-              <button type="button" class="btn-secondary invite-done-btn">Done</button>
-            </div>
-            <p class="invite-copy-status" role="status" aria-live="polite"></p>
-          </div>
-        `;
-
-        const textarea = backdrop.querySelector(".invite-message-text");
-        const copyStatus = backdrop.querySelector(".invite-copy-status");
-        backdrop.querySelector(".invite-message-hint").textContent = hint;
-        textarea.value = message;
-
-        const close = () => backdrop.remove();
-        backdrop.querySelector(".invite-message-close").addEventListener("click", close);
-        backdrop.querySelector(".invite-done-btn").addEventListener("click", close);
-        backdrop.addEventListener("click", e => {
-          if (e.target === backdrop) close();
-        });
-        backdrop.querySelector(".invite-copy-btn").addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(message);
-            copyStatus.textContent = "Copied to clipboard.";
-          } catch {
-            textarea.focus();
-            textarea.select();
-            copyStatus.textContent = "Select the text and copy it manually.";
-          }
-        });
-
-        document.body.appendChild(backdrop);
-        textarea.focus();
-        textarea.select();
-      }
-
-      async function addStaff() {
-        if (!can("staff.create")) return;
-        const firstName = newStaffFirstName.value.trim();
-        const lastName = newStaffLastName.value.trim();
-        const email = (newStaffEmail?.value || "").trim().toLowerCase();
-        const role = newStaffRole.value.trim();
-        const selectedPermissionRole = PERMISSION_ROLES.includes(newStaffPermissionRole?.value)
-          ? newStaffPermissionRole.value
-          : DEFAULT_STAFF_PERMISSION_ROLE;
-        const name = [firstName, lastName].filter(Boolean).join(" ").trim();
-        const nameInputs = [newStaffFirstName, newStaffLastName];
-        const allInputs = [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffRole, newStaffPermissionRole].filter(Boolean);
-
-        if (!name) {
-          showFormFeedback(
-            nameInputs,
-            staffFormFeedback,
-            "Enter a first or last name.",
-            newStaffFirstName
-          );
-          return;
-        }
-
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          showFormFeedback(
-            [newStaffEmail],
-            staffFormFeedback,
-            "Enter a valid email for the invite.",
-            newStaffEmail
-          );
-          return;
-        }
-
-        const exists = staff.some(memberName =>
-          memberName.toLowerCase() === name.toLowerCase()
-        );
-
-        if (exists) {
-          showFormFeedback(
-            nameInputs,
-            staffFormFeedback,
-            `A team member named “${name}” already exists.`,
-            newStaffFirstName
-          );
-          return;
-        }
-
-        clearFormFeedback(allInputs, staffFormFeedback);
-        const addBtn = document.getElementById("addStaffBtn");
-        if (addBtn) {
-          addBtn.disabled = true;
-          addBtn.textContent = "Inviting…";
-        }
-
-        try {
-          const response = await fetch("/api/staff/invite", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              firstName,
-              lastName,
-              email,
-              jobTitle: role,
-              permissionRole: selectedPermissionRole
-            })
-          });
-
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) {
-            throw new Error(payload?.error || "Could not invite team member.");
-          }
-
-          const member = payload.staffMember;
-          const displayName = member?.displayName || name;
-          if (member?.id) {
-            settingsSync.registerStaffId(displayName, member.id);
-          }
-          staff.push(displayName);
-          staffProfiles[displayName] = {
-            firstName: member?.firstName || firstName,
-            lastName: member?.lastName || lastName,
-            role: member?.jobTitle || role,
-            permissionRole: member?.permissionRole || selectedPermissionRole,
-            email: payload.email || email,
-            inviteStatus: "pending"
-          };
-
-          saveStaffProfiles();
-
-          newStaffFirstName.value = "";
-          newStaffLastName.value = "";
-          if (newStaffEmail) newStaffEmail.value = "";
-          newStaffRole.value = "";
-          if (newStaffPermissionRole) newStaffPermissionRole.value = DEFAULT_STAFF_PERMISSION_ROLE;
-
-          populateStaffFilter();
-          populateCurrentUserSelect();
-          renderStaffManager();
-          render();
-
-          if (payload.message) {
-            showInviteMessageModal({
-              message: payload.message,
-              emailSent: Boolean(payload.emailSent),
-              emailError: payload.emailError || null
-            });
-          } else {
-            showFormFeedback([], staffFormFeedback, "Team member invited.");
-          }
-
-          newStaffFirstName.focus();
-        } catch (error) {
-          console.error("Invite failed.", error);
-          showFormFeedback(
-            allInputs,
-            staffFormFeedback,
-            error instanceof Error ? error.message : "Could not invite team member.",
-            newStaffEmail || newStaffFirstName
-          );
-        } finally {
-          if (addBtn) {
-            addBtn.disabled = false;
-            addBtn.textContent = "Invite & Add";
-          }
-        }
-      }
-
-      // Shared drag state, one slot per reorderable list.
-      const reorderState = {
-        staff: { dragged: "" },
-        project: { dragged: "" },
-        orgTeam: { dragged: "" }
-      };
 
       // Wires handle-initiated drag reordering for a manager row.
       // getList returns the current list; onReorder receives the reordered list.
@@ -2003,21 +1860,38 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           </summary>
           <div class="owner-checklist-menu">
             ${visibleNames.length ? `
-              <label class="owner-checklist-option owner-checklist-select-all">
-                <input type="checkbox" class="owner-checklist-all"${allSelected ? " checked" : ""}>
-                <span>All (${visibleNames.length})</span>
-              </label>
+              <div class="owner-checklist-search-wrap">
+                <input
+                  type="search"
+                  class="owner-checklist-search"
+                  placeholder="Search people…"
+                  aria-label="Search owners"
+                  autocomplete="off"
+                >
+              </div>
             ` : ""}
-            ${visibleNames.length ? visibleNames.map(name => {
-              const checked = selected.includes(name) ? " checked" : "";
-              const suffix = members.includes(name) ? "" : " (not in project)";
-              return `
-                <label class="owner-checklist-option">
-                  <input type="checkbox" data-owner value="${escapeHtml(name)}"${checked}>
-                  <span>${escapeHtml(staffTypeLabel(name) + suffix)}</span>
+            <div class="owner-checklist-options">
+              ${visibleNames.length ? `
+                <label class="owner-checklist-option owner-checklist-select-all">
+                  <input type="checkbox" class="owner-checklist-all"${allSelected ? " checked" : ""}>
+                  <span>All (${visibleNames.length})</span>
                 </label>
-              `;
-            }).join("") : '<div class="owner-checklist-empty">No project members assigned</div>'}
+              ` : ""}
+              ${visibleNames.length ? visibleNames.map(name => {
+                const checked = selected.includes(name) ? " checked" : "";
+                const suffix = members.includes(name) ? "" : " (not in project)";
+                const label = staffTypeLabel(name) + suffix;
+                return `
+                  <label class="owner-checklist-option" data-owner-label="${escapeHtml(label.toLowerCase())}">
+                    <input type="checkbox" data-owner value="${escapeHtml(name)}"${checked}>
+                    <span>${escapeHtml(label)}</span>
+                  </label>
+                `;
+              }).join("") : '<div class="owner-checklist-empty">No project members assigned</div>'}
+            </div>
+            <div class="owner-checklist-footer">
+              <button type="button" class="owner-checklist-done">Done</button>
+            </div>
           </div>
         `;
       }
@@ -2045,8 +1919,50 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
         const allToggle = root.querySelector(".owner-checklist-all");
         if (allToggle) {
-          allToggle.checked = boxes.length > 0 && selected.length === boxes.length;
-          allToggle.indeterminate = selected.length > 0 && selected.length < boxes.length;
+          const visibleBoxes = boxes.filter(input => {
+            const option = input.closest(".owner-checklist-option");
+            return !option?.hidden;
+          });
+          const visibleSelected = visibleBoxes.filter(input => input.checked).length;
+          allToggle.checked = visibleBoxes.length > 0 && visibleSelected === visibleBoxes.length;
+          allToggle.indeterminate = visibleSelected > 0 && visibleSelected < visibleBoxes.length;
+        }
+      }
+
+      function filterOwnerChecklistOptions(root) {
+        const searchInput = root.querySelector(".owner-checklist-search");
+        const query = String(searchInput?.value || "").trim().toLowerCase();
+        const options = [...root.querySelectorAll(".owner-checklist-option[data-owner-label]")];
+        let visibleCount = 0;
+
+        options.forEach(option => {
+          const label = String(option.getAttribute("data-owner-label") || "");
+          const match = !query || label.includes(query);
+          option.hidden = !match;
+          if (match) visibleCount += 1;
+        });
+
+        const selectAll = root.querySelector(".owner-checklist-select-all");
+        if (selectAll) {
+          selectAll.hidden = Boolean(query) && visibleCount === 0;
+          const selectAllLabel = selectAll.querySelector("span");
+          if (selectAllLabel) {
+            selectAllLabel.textContent = query
+              ? `All visible (${visibleCount})`
+              : `All (${options.length})`;
+          }
+        }
+
+        let empty = root.querySelector(".owner-checklist-search-empty");
+        if (query && visibleCount === 0) {
+          if (!empty) {
+            empty = document.createElement("div");
+            empty.className = "owner-checklist-empty owner-checklist-search-empty";
+            empty.textContent = "No people match this search.";
+            root.querySelector(".owner-checklist-options")?.appendChild(empty);
+          }
+        } else if (empty) {
+          empty.remove();
         }
       }
 
@@ -2058,14 +1974,57 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         const allToggle = root.querySelector(".owner-checklist-all");
         if (allToggle) {
           allToggle.addEventListener("change", () => {
+            const query = String(root.querySelector(".owner-checklist-search")?.value || "")
+              .trim()
+              .toLowerCase();
             ownerCheckboxes(root).forEach(input => {
+              const option = input.closest(".owner-checklist-option");
+              if (query && option?.hidden) return;
               input.checked = allToggle.checked;
             });
             refreshOwnerChecklistLabel(root);
           });
         }
 
+        const searchInput = root.querySelector(".owner-checklist-search");
+        if (searchInput) {
+          searchInput.addEventListener("input", () => {
+            filterOwnerChecklistOptions(root);
+            refreshOwnerChecklistLabel(root);
+          });
+          searchInput.addEventListener("click", event => event.stopPropagation());
+          searchInput.addEventListener("keydown", event => event.stopPropagation());
+        }
+
+        const doneBtn = root.querySelector(".owner-checklist-done");
+        if (doneBtn) {
+          doneBtn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            root.open = false;
+          });
+        }
+
+        filterOwnerChecklistOptions(root);
         refreshOwnerChecklistLabel(root);
+      }
+
+      if (!window.__ownerChecklistOutsideCloseBound) {
+        window.__ownerChecklistOutsideCloseBound = true;
+        document.addEventListener(
+          "pointerdown",
+          event => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            document.querySelectorAll("details.owner-checklist[open]").forEach(details => {
+              if (!details.contains(target)) {
+                details.open = false;
+              }
+            });
+          },
+          true
+        );
       }
 
       function pad2(n) {
@@ -3503,7 +3462,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               saveTeamMembers();
               saveTeamLeaders();
               saveSchedule();
-              save();
+              save(tasks.filter(task => task.team === newName).map(task => task.id));
               populateTeamFilter();
               renderTeamManager();
               renderScheduleView();
@@ -3584,7 +3543,22 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           } else {
             memberOptions.classList.add("project-member-groups");
 
-            const appendProjectMemberOption = (staffName, memberList) => {
+            const syncDepartmentSelectAll = (groupSection) => {
+              const selectAll = groupSection.querySelector(
+                'input[type="checkbox"][data-department-select-all]'
+              );
+              if (!selectAll) return;
+
+              const memberChecks = [
+                ...groupSection.querySelectorAll('input[type="checkbox"][data-staff-name]'),
+              ];
+              const checkedCount = memberChecks.filter(box => box.checked).length;
+              selectAll.checked = memberChecks.length > 0 && checkedCount === memberChecks.length;
+              selectAll.indeterminate =
+                checkedCount > 0 && checkedCount < memberChecks.length;
+            };
+
+            const appendProjectMemberOption = (staffName, memberList, groupSection) => {
               const label = document.createElement("label");
               label.className = "team-member-option";
 
@@ -3613,6 +3587,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   }
                 }
 
+                syncDepartmentSelectAll(groupSection);
                 refreshLeaderOptions();
                 logProjectConfig("member-toggle", {
                   staffName,
@@ -3630,38 +3605,145 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               memberList.appendChild(label);
             };
 
-            // Group each person once by their complete Team membership. This keeps
-            // project checkboxes unambiguous when someone belongs to several Teams.
-            const groupedStaff = [];
+            // Group project candidates by Workforce department so long lists
+            // are easier to scan when assigning members after create.
+            const departmentGroups = new Map();
             staff.forEach(staffName => {
-              const memberships = orgTeamsForStaff(staffName);
-              const groupName = memberships.length ? memberships.join(" · ") : "No Teams";
-              let group = groupedStaff.find(item => item.name === groupName);
-              if (!group) {
-                group = { name: groupName, members: [] };
-                groupedStaff.push(group);
+              const department = String(staffProfiles[staffName]?.department || "").trim();
+              const groupName = department || "No department";
+              if (!departmentGroups.has(groupName)) {
+                departmentGroups.set(groupName, []);
               }
-              group.members.push(staffName);
+              departmentGroups.get(groupName).push(staffName);
             });
+
+            const groupedStaff = [...departmentGroups.entries()]
+              .map(([name, members]) => ({
+                name,
+                members: [...members].sort((a, b) => a.localeCompare(b)),
+              }))
+              .sort((a, b) => {
+                if (a.name === "No department") return 1;
+                if (b.name === "No department") return -1;
+                return a.name.localeCompare(b.name);
+              });
 
             groupedStaff.forEach(group => {
               const groupSection = document.createElement("section");
-              groupSection.className = "project-member-group";
+              groupSection.className = "project-member-group is-collapsed";
 
-              const groupTitle = document.createElement("div");
+              const groupHeader = document.createElement("div");
+              groupHeader.className = "project-member-group-header";
+
+              const selectAllLabel = document.createElement("label");
+              selectAllLabel.className = "project-member-group-select-all";
+              selectAllLabel.title = `Select all in ${group.name}`;
+
+              const selectAll = document.createElement("input");
+              selectAll.type = "checkbox";
+              selectAll.dataset.departmentSelectAll = "true";
+              selectAll.dataset.permission = "projects.manageMembers";
+              selectAll.dataset.permissionMode = "disable";
+              selectAll.setAttribute("aria-label", `Select all ${group.name}`);
+
+              selectAll.addEventListener("change", () => {
+                if (!can("projects.manageMembers")) {
+                  selectAll.checked = !selectAll.checked;
+                  selectAll.indeterminate = false;
+                  return;
+                }
+                clearProjectRowFeedback();
+
+                const shouldSelect = selectAll.checked;
+                group.members.forEach(staffName => {
+                  if (shouldSelect) {
+                    if (!draftMembers.includes(staffName)) {
+                      draftMembers.push(staffName);
+                    }
+                  } else {
+                    draftMembers = draftMembers.filter(member => member !== staffName);
+                    if (draftLeader === staffName) {
+                      draftLeader = "";
+                    }
+                  }
+                });
+
+                groupSection
+                  .querySelectorAll('input[type="checkbox"][data-staff-name]')
+                  .forEach(box => {
+                    box.checked = shouldSelect;
+                  });
+                selectAll.indeterminate = false;
+                refreshLeaderOptions();
+                logProjectConfig("department-select-all", {
+                  department: group.name,
+                  checked: shouldSelect,
+                  count: group.members.length,
+                });
+              });
+
+              const selectAllText = document.createElement("span");
+              selectAllText.textContent = "All";
+
+              selectAllLabel.appendChild(selectAll);
+              selectAllLabel.appendChild(selectAllText);
+
+              const toggleBtn = document.createElement("button");
+              toggleBtn.type = "button";
+              toggleBtn.className = "project-member-group-toggle";
+              toggleBtn.setAttribute("aria-expanded", "false");
+              toggleBtn.title = `Show ${group.name}`;
+
+              const groupTitle = document.createElement("span");
               groupTitle.className = "project-member-group-title";
               groupTitle.textContent = group.name;
 
+              const groupCount = document.createElement("span");
+              groupCount.className = "project-member-group-count";
+              groupCount.textContent = String(group.members.length);
+
+              const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+              chevron.setAttribute("class", "project-member-group-chevron");
+              chevron.setAttribute("viewBox", "0 0 24 24");
+              chevron.setAttribute("aria-hidden", "true");
+              const chevronPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+              chevronPath.setAttribute("d", "M6 9.5 12 15l6-5.5");
+              chevronPath.setAttribute("fill", "none");
+              chevronPath.setAttribute("stroke", "currentColor");
+              chevronPath.setAttribute("stroke-width", "2");
+              chevronPath.setAttribute("stroke-linecap", "round");
+              chevronPath.setAttribute("stroke-linejoin", "round");
+              chevron.appendChild(chevronPath);
+
+              toggleBtn.appendChild(groupTitle);
+              toggleBtn.appendChild(groupCount);
+              toggleBtn.appendChild(chevron);
+
+              groupHeader.appendChild(selectAllLabel);
+              groupHeader.appendChild(toggleBtn);
+
               const memberList = document.createElement("div");
               memberList.className = "project-member-group-list";
+              memberList.hidden = true;
 
               group.members.forEach(staffName => {
-                appendProjectMemberOption(staffName, memberList);
+                appendProjectMemberOption(staffName, memberList, groupSection);
               });
 
-              groupSection.appendChild(groupTitle);
+              toggleBtn.addEventListener("click", () => {
+                const willExpand = groupSection.classList.contains("is-collapsed");
+                groupSection.classList.toggle("is-collapsed", !willExpand);
+                memberList.hidden = !willExpand;
+                toggleBtn.setAttribute("aria-expanded", willExpand ? "true" : "false");
+                toggleBtn.title = willExpand
+                  ? `Hide ${group.name}`
+                  : `Show ${group.name}`;
+              });
+
+              groupSection.appendChild(groupHeader);
               groupSection.appendChild(memberList);
               memberOptions.appendChild(groupSection);
+              syncDepartmentSelectAll(groupSection);
             });
           }
 
@@ -3701,6 +3783,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           function syncProjectConfigureControlsFromDraft() {
             memberOptions.querySelectorAll('input[type="checkbox"][data-staff-name]').forEach(checkbox => {
               checkbox.checked = draftMembers.includes(checkbox.dataset.staffName);
+            });
+            memberOptions.querySelectorAll(".project-member-group").forEach(groupSection => {
+              const selectAll = groupSection.querySelector(
+                'input[type="checkbox"][data-department-select-all]'
+              );
+              if (!selectAll) return;
+              const memberChecks = [
+                ...groupSection.querySelectorAll('input[type="checkbox"][data-staff-name]'),
+              ];
+              const checkedCount = memberChecks.filter(box => box.checked).length;
+              selectAll.checked = memberChecks.length > 0 && checkedCount === memberChecks.length;
+              selectAll.indeterminate =
+                checkedCount > 0 && checkedCount < memberChecks.length;
             });
             refreshLeaderOptions();
           }
@@ -3816,7 +3911,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             removeBtn.disabled = true;
             try {
               if (assignedTasks.length > 0) {
-                save();
+                save(assignedTasks.map(task => task.id));
                 await new Promise(resolve => setTimeout(resolve, 400));
               }
               await settingsSync.deleteProject(team);
@@ -3986,9 +4081,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function renderAuthenticatedUser() {
+        const name = getCurrentUser()?.name || currentUserName || "Unknown";
         const display = document.getElementById("currentUserDisplay");
         if (display) {
-          display.textContent = getCurrentUser()?.name || currentUserName || "Unknown";
+          display.textContent = name;
+        }
+        const toggleName = document.getElementById("sidebarFooterToggleName");
+        if (toggleName) {
+          toggleName.textContent = name;
         }
       }
 
@@ -4130,6 +4230,70 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
         teamFilter.value = teams.includes(existing) ? existing : "All";
         currentFilter = teamFilter.value;
+      }
+
+      function closeAddTaskProjectModal() {
+        if (!addTaskProjectModalBackdrop) return;
+        addTaskProjectModalBackdrop.hidden = true;
+        if (addTaskProjectFeedback) {
+          addTaskProjectFeedback.classList.remove("visible");
+          addTaskProjectFeedback.textContent = "";
+        }
+      }
+
+      function openAddTaskProjectModal(status) {
+        if (!addTaskProjectModalBackdrop || !addTaskProjectSelect) return;
+        if (!can("tasks.create")) return;
+
+        pendingAddTaskStatus = status || "To Do";
+        addTaskProjectSelect.innerHTML = "";
+
+        if (!teams.length) {
+          const emptyOption = document.createElement("option");
+          emptyOption.value = "";
+          emptyOption.textContent = "No projects yet";
+          addTaskProjectSelect.appendChild(emptyOption);
+          if (addTaskProjectFeedback) {
+            addTaskProjectFeedback.textContent = "Create a project first, then add tasks.";
+            addTaskProjectFeedback.classList.add("visible");
+          }
+          if (addTaskProjectContinueBtn) addTaskProjectContinueBtn.disabled = true;
+        } else {
+          teams.forEach(team => {
+            const option = document.createElement("option");
+            option.value = team;
+            option.textContent = team;
+            addTaskProjectSelect.appendChild(option);
+          });
+          if (addTaskProjectFeedback) {
+            addTaskProjectFeedback.textContent = "";
+            addTaskProjectFeedback.classList.remove("visible");
+          }
+          if (addTaskProjectContinueBtn) addTaskProjectContinueBtn.disabled = false;
+        }
+
+        addTaskProjectModalBackdrop.hidden = false;
+        requestAnimationFrame(() => addTaskProjectSelect.focus());
+      }
+
+      function confirmAddTaskProjectModal() {
+        const projectName = String(addTaskProjectSelect?.value || "").trim();
+        if (!projectName || !teams.includes(projectName)) {
+          if (addTaskProjectFeedback) {
+            addTaskProjectFeedback.textContent = "Choose a project to continue.";
+            addTaskProjectFeedback.classList.add("visible");
+          }
+          return;
+        }
+
+        const statusToOpen = pendingAddTaskStatus || "To Do";
+        currentFilter = projectName;
+        teamFilter.value = projectName;
+        currentOrgTeamFilter = "All";
+        orgTeamFilter.value = "All";
+        pendingAddTaskStatus = statusToOpen;
+        closeAddTaskProjectModal();
+        render();
       }
 
       function priorityClass(priority) {
@@ -4280,7 +4444,22 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         setTimeout(() => overlay.remove(), 1400);
       }
 
+      function dedupeTasksById() {
+        const seen = new Set();
+        const next = [];
+        for (const task of tasks) {
+          if (!task?.id || seen.has(task.id)) continue;
+          seen.add(task.id);
+          next.push(task);
+        }
+        if (next.length !== tasks.length) {
+          tasks = next;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        }
+      }
+
       function render() {
+        dedupeTasksById();
         board.innerHTML = "";
         updateFilterControls();
         const visible = filteredTasks();
@@ -4303,9 +4482,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   class="column-add-btn"
                   data-permission="tasks.create"
                   data-permission-mode="disable"
-                  ${currentFilter === "All" ? 'data-non-permission-disabled="true"' : ""}
-                  ${currentFilter === "All" ? "disabled" : ""}
-                  title="${currentFilter === "All" ? "Select a specific project to add tasks" : "Add task to " + status}"
+                  title="${currentFilter === "All" ? "Add task — choose a project" : "Add task to " + status}"
                 >+ Add</button>
               </div>
               <div class="count">${inColumn.length}</div>
@@ -4351,7 +4528,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
                   <div class="inline-editor-actions">
                     <button type="button" class="btn-secondary inline-cancel">Cancel</button>
-                    <button type="button" class="btn-primary inline-save">Save Task</button>
+                    <button type="button" class="btn-primary inline-save">Add Task</button>
                   </div>
                 </div>
               </div>
@@ -4386,7 +4563,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           function openInlineEditor(task = null) {
             if (currentFilter === "All" && !task) {
-              alert("Select a specific project from the project dropdown first.");
+              openAddTaskProjectModal(status);
               return;
             }
 
@@ -4420,9 +4597,16 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
           });
 
+          if (pendingAddTaskStatus === status && currentFilter !== "All") {
+            pendingAddTaskStatus = "";
+            requestAnimationFrame(() => openInlineEditor());
+          }
+
           cancelInlineBtn.addEventListener("click", closeInlineEditor);
 
           saveInlineBtn.addEventListener("click", () => {
+            if (saveInlineBtn.dataset.saving === "1") return;
+
             const editingId = idInput.value;
             if (editingId ? !can("tasks.edit") : !can("tasks.create")) return;
 
@@ -4431,6 +4615,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               titleInput.focus();
               return;
             }
+
+            saveInlineBtn.dataset.saving = "1";
+            saveInlineBtn.disabled = true;
 
             const existing = editingId ? tasks.find(t => t.id === editingId) : null;
 
@@ -4451,11 +4638,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             if (editingId) {
               const index = tasks.findIndex(t => t.id === editingId);
               if (index >= 0) tasks[index] = data;
-            } else {
+              save(editingId);
+            } else if (!tasks.some(row => row.id === data.id)) {
               tasks.push(data);
+              save();
+            } else {
+              save();
             }
-
-            save();
             closeInlineEditor();
             render();
           });
@@ -4703,7 +4892,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                           ...tasks[index],
                           title: nextTitle
                         };
-                        save();
+                        save(task.id);
                       }
                     }
                   }
@@ -4778,7 +4967,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                       if (index < 0) return;
 
                       tasks[index] = taskWithOwners(tasks[index], chosenOwners);
-                      save();
+                      save(task.id);
 
                       ownersEl.textContent = `Owners: ${ownerDisplayLabel(tasks[index]) || "Unassigned"}`;
                     });
@@ -4890,7 +5079,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                         ...tasks[index],
                         due: input.value
                       };
-                      save();
+                      save(task.id);
                     }
                   }
 
@@ -4948,7 +5137,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                           ...tasks[index],
                           priority: nextPriority
                         };
-                        save();
+                        save(task.id);
                       }
                     }
                   }
@@ -5071,8 +5260,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   });
 
                   tasks = tasks.filter(t => t.id !== task.id);
-                  save();
+                  persistTasksLocally();
                   saveArchivedTasks();
+                  void trackerSync.syncTaskArchive(task.id);
                   render();
                   return;
                 }
@@ -5176,7 +5366,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   due: dueInput.value
                 }, selectedOwnersFromChecklist(ownerInput));
 
-                save();
+                save(task.id);
                 render();
               });
 
@@ -5233,7 +5423,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
               moveTaskRelative(draggedId, task.id, status, placeAfter);
               clearTaskDropIndicators();
-              save();
+              // Local persist only — move uses /move (tasks.move). Do not schedule
+              // detail sync/PATCH here (that needs tasks.edit and 403s for staff).
+              persistTasksLocally();
               void trackerSync.syncTaskMove(draggedId, status);
               render();
 
@@ -5292,7 +5484,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
             moveTaskToColumnEnd(draggedId, status, visibleTargetIds);
             clearTaskDropIndicators();
-            save();
+            persistTasksLocally();
             void trackerSync.syncTaskMove(draggedId, status);
             render();
 
@@ -5301,6 +5493,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           board.appendChild(column);
         });
+
+        updateOngoingCount();
+        if (ongoingView.classList.contains("active")) {
+          renderOngoingActivity();
+        }
 
         applyPermissionGating();
       }
@@ -5315,6 +5512,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
         appSidebar.classList.toggle("collapsed");
       });
+
+      const sidebarFooter = document.getElementById("sidebarFooter");
+      const sidebarFooterToggle = document.getElementById("sidebarFooterToggle");
+      const sidebarFooterPanel = document.getElementById("sidebarFooterPanel");
+      if (sidebarFooter && sidebarFooterToggle && sidebarFooterPanel) {
+        sidebarFooterToggle.addEventListener("click", () => {
+          const willExpand = sidebarFooter.classList.contains("is-collapsed");
+          sidebarFooter.classList.toggle("is-collapsed", !willExpand);
+          sidebarFooterPanel.hidden = !willExpand;
+          sidebarFooterToggle.setAttribute("aria-expanded", willExpand ? "true" : "false");
+          sidebarFooterToggle.title = willExpand ? "Hide account & backup" : "Show account & backup";
+        });
+      }
 
       mobileSidebarBtn.addEventListener("click", () => {
         appSidebar.classList.add("mobile-open");
@@ -5361,8 +5571,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         root.querySelectorAll("[data-permission]").forEach(el => {
           const allowed = can(el.dataset.permission);
           if (el.dataset.permissionMode === "disable") {
+            el.hidden = false;
             el.classList.toggle("permission-disabled", !allowed);
             el.disabled = !allowed || el.dataset.nonPermissionDisabled === "true";
+            if (!allowed) {
+              el.title = "You do not have permission for this action";
+            } else if (el.title === "You do not have permission for this action") {
+              el.removeAttribute("title");
+            }
           } else {
             el.hidden = !allowed;
             if ("disabled" in el) {
@@ -5389,6 +5605,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           teams: teamsView,
           schedule: scheduleView,
           completedTasks: completedTasksView,
+          ongoing: ongoingView,
           trash: trashView,
           settings: settingsView
         };
@@ -5402,7 +5619,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         const completedTasksNavBtn = document.getElementById("completedTasksBtn");
         const trashNavBtn = document.getElementById("trashBtn");
 
-        [tasksNavBtn, orgTeamsNavBtn, staffNavBtn, teamsNavBtn, scheduleNavBtn, completedTasksNavBtn, trashNavBtn, sidebarBrandMark]
+        [tasksNavBtn, orgTeamsNavBtn, staffNavBtn, teamsNavBtn, scheduleNavBtn, completedTasksNavBtn, ongoingNavBtn, trashNavBtn, sidebarBrandMark]
           .forEach(btn => btn.classList.remove("active"));
 
         if (viewName === "tasks") {
@@ -5447,6 +5664,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           workspaceTitle.textContent = "Completed Tasks";
           workspaceSubtitle.textContent = "A permanent log of finished, archived work";
           renderCompletedTasks();
+        } else if (viewName === "ongoing") {
+          ongoingNavBtn.classList.add("active");
+          taskFilters.classList.add("task-filters-hidden");
+          workspaceTitle.textContent = "Ongoing Activity";
+          workspaceSubtitle.textContent = "Projects in flight — expand to see employee stats and open tasks";
+          renderOngoingActivity();
         } else if (viewName === "trash") {
           trashNavBtn.classList.add("active");
           taskFilters.classList.add("task-filters-hidden");
@@ -5462,6 +5685,30 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
 
         closeMobileSidebar();
+      }
+
+      if (addTaskProjectContinueBtn) {
+        addTaskProjectContinueBtn.addEventListener("click", confirmAddTaskProjectModal);
+      }
+      if (addTaskProjectCancelBtn) {
+        addTaskProjectCancelBtn.addEventListener("click", () => {
+          pendingAddTaskStatus = "";
+          closeAddTaskProjectModal();
+        });
+      }
+      if (addTaskProjectModalClose) {
+        addTaskProjectModalClose.addEventListener("click", () => {
+          pendingAddTaskStatus = "";
+          closeAddTaskProjectModal();
+        });
+      }
+      if (addTaskProjectModalBackdrop) {
+        addTaskProjectModalBackdrop.addEventListener("click", event => {
+          if (event.target === addTaskProjectModalBackdrop) {
+            pendingAddTaskStatus = "";
+            closeAddTaskProjectModal();
+          }
+        });
       }
 
       // Project and Team describe overlapping groupings, so only one narrows the
@@ -5558,37 +5805,24 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         switchWorkspaceView("completedTasks");
       });
 
-      document.getElementById("manageStaffBtn").addEventListener("click", () => {
-        switchWorkspaceView("staff");
+      ongoingNavBtn.addEventListener("click", () => {
+        switchWorkspaceView("ongoing");
       });
 
-      document.getElementById("addStaffBtn").addEventListener("click", addStaff);
-
-      [newStaffFirstName, newStaffLastName, newStaffEmail].filter(Boolean).forEach(input => {
-        input.addEventListener("input", () => {
-          clearFormFeedback(
-            [newStaffFirstName, newStaffLastName, newStaffEmail].filter(Boolean),
-            staffFormFeedback
-          );
-        });
-      });
-
-      if (newStaffPermissionRole) {
-        newStaffPermissionRole.addEventListener("change", () => {
-          clearFormFeedback(
-            [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffPermissionRole].filter(Boolean),
-            staffFormFeedback
-          );
+      if (ongoingSearch) {
+        ongoingSearch.addEventListener("input", () => {
+          if (ongoingView.classList.contains("active")) renderOngoingActivity();
         });
       }
 
-      [newStaffFirstName, newStaffLastName, newStaffEmail, newStaffRole, newStaffPermissionRole].filter(Boolean).forEach(input => {
-        input.addEventListener("keydown", e => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            addStaff();
-          }
+      if (ongoingDeptFilter) {
+        ongoingDeptFilter.addEventListener("change", () => {
+          if (ongoingView.classList.contains("active")) renderOngoingActivity();
         });
+      }
+
+      document.getElementById("manageStaffBtn").addEventListener("click", () => {
+        switchWorkspaceView("staff");
       });
 
       document.getElementById("manageTeamsBtn").addEventListener("click", () => {
@@ -5661,6 +5895,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       });
 
       document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && addTaskProjectModalBackdrop && !addTaskProjectModalBackdrop.hidden) {
+          pendingAddTaskStatus = "";
+          closeAddTaskProjectModal();
+          return;
+        }
         if (event.key === "Escape" && !scheduleModalBackdrop.hidden) {
           closeScheduleModal();
         }
@@ -5732,6 +5971,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
         updateTrashCount();
         updateArchivedCount();
+        updateOngoingCount();
         populateTeamFilter();
         populateOrgTeamFilter();
         populateStaffFilter();
@@ -5856,8 +6096,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       if (preloadData) {
         updateTrashCount();
         updateArchivedCount();
+        updateOngoingCount();
       } else {
-        save();
+        // Persist locally only — do not schedule API sync before trackerSync.init()
+        // has snapshotted known task ids (that race POSTs every task → 403).
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
         saveTrash();
         saveArchivedTasks();
         saveStaff();

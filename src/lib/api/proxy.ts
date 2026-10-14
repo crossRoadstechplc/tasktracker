@@ -54,7 +54,7 @@ export async function getValidAccessToken(): Promise<{
 
 export async function proxyToTaskTracker(
   path: string,
-  init?: RequestInit & { rawBody?: BodyInit | null },
+  init?: RequestInit & { rawBody?: BodyInit | null; forwardFrom?: Request },
 ): Promise<NextResponse> {
   const session = await getValidAccessToken();
   if (!session) {
@@ -78,6 +78,13 @@ export async function proxyToTaskTracker(
           : { ...init.headers };
     Object.assign(headers, extra);
     headers.authorization = `Bearer ${session.accessToken}`;
+  }
+
+  // Forward tracker client id so SSE can ignore the actor's own echoes.
+  // Without this, staff get a full workspace reload on every drag/drop.
+  const clientId = init?.forwardFrom?.headers.get("x-client-id")?.trim();
+  if (clientId) {
+    headers["x-client-id"] = clientId;
   }
 
   let upstream = await backendFetch(`/task-tracker${path}`, {
@@ -128,6 +135,23 @@ export async function proxyToTaskTracker(
     applySetCookieFromUpstream(res, session.accessToken, session.rotatedRefresh);
   }
   return res;
+}
+
+/** Proxy a Next.js App Router request to the task-tracker backend. */
+export async function proxyTrackerRequest(
+  request: Request,
+  method?: string,
+): Promise<NextResponse> {
+  const url = new URL(request.url);
+  const suffix = url.pathname.replace(/^\/api/, "") + url.search;
+  const verb = (method ?? request.method).toUpperCase();
+  const needsBody = verb !== "GET" && verb !== "HEAD";
+  const body = needsBody ? await request.text() : undefined;
+  return proxyToTaskTracker(suffix, {
+    method: verb,
+    body: body || undefined,
+    forwardFrom: request,
+  });
 }
 
 function streamProxyResponse(

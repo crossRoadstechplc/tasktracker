@@ -262,7 +262,14 @@
       margin-bottom: 12px;
     }
 
-    .inline-editor-inner { overflow: hidden; }
+    .inline-editor-inner {
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .inline-editor.open .inline-editor-inner {
+      overflow: visible;
+    }
 
     .inline-editor-panel {
       background: #ffffff;
@@ -321,13 +328,42 @@
     .inline-editor-actions {
       display: flex;
       justify-content: flex-end;
-      gap: 7px;
-      margin-top: 9px;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 4px;
     }
 
     .inline-editor-actions button {
-      padding: 7px 10px;
-      font-size: 12.67px;
+      padding: 8px 14px;
+      font-size: 13px;
+      min-height: 36px;
+    }
+
+    .inline-editor-actions .inline-cancel {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      background: #f1f5f9 !important;
+      color: #0f172a !important;
+      border: 1px solid #cbd5e1 !important;
+      font-weight: 600;
+    }
+
+    .inline-editor-actions .inline-save {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      background: #2563eb !important;
+      color: #ffffff !important;
+      border: 1px solid #2563eb !important;
+      font-weight: 700;
+    }
+
+    .inline-editor-actions .inline-save:hover {
+      background: #1d4ed8 !important;
+      border-color: #1d4ed8 !important;
+      color: #ffffff !important;
     }
 
 
@@ -2621,12 +2657,19 @@
 
     .owner-checklist {
       position: relative;
+      z-index: 1;
       width: 100%;
       min-width: 0;
       border: 1px solid #cccccc;
       border-radius: 7px;
       background: #ffffff;
       font-size: 12.67px;
+    }
+
+    .owner-checklist[open] {
+      z-index: 40;
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
 
     .owner-checklist summary {
@@ -2682,14 +2725,91 @@
     }
 
     .owner-checklist-menu {
-      border-top: 1px solid #dddddd;
-      padding: 6px;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      z-index: 50;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+      max-height: 280px;
+      overflow: hidden;
+    }
+
+    .owner-checklist-search-wrap {
+      padding: 8px 8px 0;
+      background: #ffffff;
+    }
+
+    .owner-checklist-search {
+      width: 100% !important;
+      min-height: 34px !important;
+      padding: 6px 10px !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 7px !important;
+      background: #f8fafc !important;
+      color: #0f172a !important;
+      font-size: 12.67px !important;
+      font-weight: 500 !important;
+      box-shadow: none !important;
+    }
+
+    .owner-checklist-search:focus {
+      outline: none;
+      border-color: #2563eb !important;
+      background: #ffffff !important;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+    }
+
+    .owner-checklist-options {
       display: flex;
       flex-direction: column;
       gap: 2px;
-      background: #ffffff;
-      max-height: 170px;
+      padding: 6px;
       overflow-y: auto;
+      max-height: 170px;
+      background: #ffffff;
+    }
+
+    .owner-checklist-option[hidden] {
+      display: none !important;
+    }
+
+    .owner-checklist-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 8px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+
+    .owner-checklist-done {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px !important;
+      padding: 6px 14px !important;
+      border: 1px solid #2563eb !important;
+      border-radius: 7px !important;
+      background: #2563eb !important;
+      color: #ffffff !important;
+      font-size: 12.67px !important;
+      font-weight: 700 !important;
+      line-height: 1.2 !important;
+      cursor: pointer;
+      box-shadow: none !important;
+    }
+
+    .owner-checklist-done:hover {
+      background: #1d4ed8 !important;
+      border-color: #1d4ed8 !important;
+      color: #ffffff !important;
     }
 
     .owner-checklist-option {
@@ -3017,26 +3137,30 @@
     /* Spreadsheet-style Manage Staff list */
     .staff-manager.staff-table {
       display: block;
-      margin-top: 14px;
+      margin-top: 10px;
       border: 1px solid #d8d8d8;
       border-bottom: 0;
       background: #ffffff;
+      overflow-x: auto;
+      width: 100%;
     }
 
     .staff-table-header {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 180px;
+      grid-template-columns: minmax(120px, 1.3fr) minmax(140px, 1.4fr) minmax(90px, 1fr) minmax(72px, 0.8fr) minmax(80px, 0.9fr) minmax(88px, 0.85fr) minmax(128px, 1fr);
+      min-width: 0;
+      width: 100%;
       background: #f5f5f5;
       border-bottom: 1px solid #d8d8d8;
       color: #555555;
-      font-size: 11.67px;
+      font-size: 11px;
       font-weight: 650;
       text-transform: uppercase;
-      letter-spacing: .04em;
+      letter-spacing: .03em;
     }
 
     .staff-table-header > div {
-      padding: 8px 10px;
+      padding: 7px 8px;
       border-right: 1px solid #d8d8d8;
     }
 
@@ -3046,7 +3170,9 @@
 
     .staff-manager .staff-row {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 180px;
+      grid-template-columns: minmax(120px, 1.3fr) minmax(140px, 1.4fr) minmax(90px, 1fr) minmax(72px, 0.8fr) minmax(80px, 0.9fr) minmax(88px, 0.85fr) minmax(128px, 1fr);
+      min-width: 0;
+      width: 100%;
       gap: 0;
       align-items: stretch;
       padding: 0;
@@ -3058,11 +3184,12 @@
     }
 
     .staff-manager .staff-cell {
-      min-height: 42px;
-      padding: 6px 9px;
+      min-height: 36px;
+      padding: 4px 8px;
       display: flex;
       align-items: center;
       border-right: 1px solid #d8d8d8;
+      overflow: hidden;
     }
 
     .staff-manager .staff-cell:last-child {
@@ -3084,6 +3211,52 @@
       background: #ffffff;
     }
 
+    .staff-manager .staff-permission-cell select.staff-profile-permission-role {
+      width: 100%;
+      min-height: 28px;
+      padding: 2px 4px;
+      border: 1px solid #d0d0d0;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 12px;
+    }
+
+    .staff-manager .staff-email-cell,
+    .staff-manager .staff-job-cell,
+    .staff-manager .staff-dept-cell,
+    .staff-manager .staff-office-cell,
+    .staff-manager .staff-workforce-role-cell {
+      color: #444;
+      font-size: 12.5px;
+      min-width: 0;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      display: block;
+      line-height: 36px;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    .staff-manager .staff-name-cell .staff-display-wrap {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .staff-manager .staff-name-cell .staff-display-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .staff-manager .staff-name-cell .staff-display-role {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 1px;
+    }
+
     .staff-manager .staff-row-actions {
       gap: 5px;
       justify-content: flex-end;
@@ -3103,7 +3276,7 @@
 
       .staff-table-header,
       .staff-manager .staff-row {
-        min-width: 520px;
+        min-width: 720px;
       }
     }
 
@@ -3945,7 +4118,7 @@
       border-bottom: 0;
       border-radius: var(--ui-radius-card) var(--ui-radius-card) 0 0;
       background: var(--ui-surface);
-      overflow: hidden;
+      overflow-x: auto;
       box-shadow: none;
     }
 
@@ -4335,37 +4508,133 @@
     }
 
 
-    /* Projects > Configure: browse Team Members grouped by organizational Team */
+    /* Projects > Configure: browse Team Members grouped by department */
     .team-manager .project-member-groups {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 8px;
     }
 
     .team-manager .project-member-group {
       display: block;
       min-width: 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #ffffff;
+      overflow: hidden;
     }
 
-    .team-manager .project-member-group + .project-member-group {
-      padding-top: 12px;
-      border-top: 1px solid #e3e3e3;
+    .team-manager .project-member-group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #f8fafc;
+      border-bottom: 1px solid transparent;
+    }
+
+    .team-manager .project-member-group:not(.is-collapsed) .project-member-group-header {
+      border-bottom-color: #e2e8f0;
+    }
+
+    .team-manager .project-member-group-select-all {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      margin: 0;
+      padding: 4px 6px;
+      border-radius: 6px;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .team-manager .project-member-group-select-all:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    .team-manager .project-member-group-select-all input {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      accent-color: #2563eb;
+    }
+
+    .team-manager .project-member-group-toggle {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 4px 6px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #0f172a;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .team-manager .project-member-group-toggle:hover {
+      background: #e2e8f0;
     }
 
     .team-manager .project-member-group-title {
-      margin-bottom: 7px;
-      color: #555555;
-      font-size: var(--ui-font-xs);
+      margin: 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #334155;
+      font-size: 12px;
       font-weight: 700;
       line-height: 1.2;
-      letter-spacing: .04em;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
+    }
+
+    .team-manager .project-member-group-count {
+      flex: 0 0 auto;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 20px;
+      text-align: center;
+    }
+
+    .team-manager .project-member-group-chevron {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+      margin-left: auto;
+      color: #64748b;
+      transition: transform 0.18s ease;
+    }
+
+    .team-manager .project-member-group.is-collapsed .project-member-group-chevron {
+      transform: rotate(-90deg);
     }
 
     .team-manager .project-member-group-list {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 5px 12px;
+      padding: 10px 12px 12px;
+    }
+
+    .team-manager .project-member-group.is-collapsed .project-member-group-list,
+    .team-manager .project-member-group-list[hidden] {
+      display: none !important;
     }
 
     .team-manager .project-member-group-list .team-member-option {
@@ -4614,14 +4883,40 @@
    ADMIN PORTAL FULL REDESIGN — authoritative shell polish
    ========================================================= */
 
+/* Viewport shell: sticky sidebar + independent page scroll (no dual-scroll fight) */
+.app-shell {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 .app-sidebar {
   width: 256px !important;
   flex: 0 0 256px !important;
+  align-self: flex-start;
   padding: 0 !important;
   background: #020617 !important;
   color: #cbd5e1 !important;
   border-right: 1px solid #1e293b !important;
-  position: relative;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 40;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  /* visible so the collapse control can sit outside the edge */
   overflow: visible;
 }
 
@@ -4632,6 +4927,7 @@
 
 .sidebar-top {
   position: relative;
+  flex: 0 0 auto;
   border-bottom: 1px solid #1e293b;
   padding: 16px 20px;
   gap: 0;
@@ -4708,11 +5004,34 @@
 
 .sidebar-nav {
   flex: 1 1 auto;
+  min-height: 0; /* allow nav to shrink so it scrolls inside the viewport sidebar */
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 12px 12px 16px;
   gap: 16px;
   display: flex;
   flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 .sidebar-nav-group {
@@ -4780,10 +5099,78 @@
 }
 
 .sidebar-footer {
+  flex: 0 0 auto;
   border-top: 1px solid #1e293b !important;
-  padding: 16px;
+  padding: 10px 12px 12px;
   color: #64748b !important;
   font-size: 12px;
+}
+
+.sidebar-footer-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-footer-toggle:hover {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.sidebar-footer-toggle-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-footer-toggle-kicker {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-footer-toggle-name {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-footer-toggle-chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: #94a3b8;
+  transition: transform 0.18s ease;
+}
+
+.sidebar-footer.is-collapsed .sidebar-footer-toggle-chevron {
+  transform: rotate(180deg);
+}
+
+.sidebar-footer-panel {
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.sidebar-footer.is-collapsed .sidebar-footer-panel,
+.sidebar-footer-panel[hidden] {
+  display: none !important;
 }
 
 .sidebar-footer-meta {
@@ -4928,11 +5315,60 @@
 }
 
 .management-toolbar {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   border-radius: 12px !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03) !important;
   padding: 16px !important;
+}
+
+.management-toolbar[hidden] {
+  display: none !important;
+}
+
+.management-toolbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.project-create-btn,
+#addTeamBtn,
+#addOrgTeamBtn {
+  flex: 0 0 auto;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  min-height: 40px !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: 1px solid #2563eb !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  cursor: pointer;
+}
+
+.project-create-btn:hover:not(:disabled),
+#addTeamBtn:hover:not(:disabled),
+#addOrgTeamBtn:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}
+
+.project-create-btn:disabled,
+#addTeamBtn:disabled,
+#addOrgTeamBtn:disabled,
+.project-create-btn.permission-disabled,
+#addTeamBtn.permission-disabled,
+#addOrgTeamBtn.permission-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .team-row,
@@ -5146,6 +5582,13 @@
   .app-sidebar.collapsed {
     width: 256px !important;
     flex-basis: 256px !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
   }
 
   .app-sidebar.collapsed .sidebar-nav {
@@ -5176,3 +5619,437 @@
   }
 }
 
+
+/* Team Members directory: use full main width (management pages stay narrower) */
+#staffView.management-page {
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 20px 24px;
+}
+
+#staffView .workspace-section-header {
+  margin-bottom: 10px;
+}
+
+#staffView .workspace-section-header p {
+  margin-top: 4px;
+  max-width: 64rem;
+}
+
+#staffView .staff-manager.staff-table {
+  margin-top: 8px;
+}
+
+#staffView .staff-table-header,
+#staffView .staff-manager .staff-row {
+  grid-template-columns:
+    minmax(0, 1.25fr)
+    minmax(0, 1.35fr)
+    minmax(0, 1fr)
+    minmax(0, 0.75fr)
+    minmax(0, 0.85fr)
+    minmax(0, 0.8fr)
+    minmax(132px, 0.95fr);
+  min-width: 0;
+  width: 100%;
+}
+
+#staffView .staff-manager .staff-permission-cell {
+  position: sticky;
+  right: 0;
+  background: #ffffff;
+  z-index: 1;
+  box-shadow: -6px 0 8px -8px rgba(15, 23, 42, 0.25);
+}
+
+#staffView .staff-table-header > div:last-child {
+  position: sticky;
+  right: 0;
+  background: #f5f5f5;
+  z-index: 2;
+  box-shadow: -6px 0 8px -8px rgba(15, 23, 42, 0.25);
+}
+
+@media (max-width: 900px) {
+  #staffView.management-page {
+    padding: 14px 12px 20px;
+  }
+}
+
+.add-task-project-modal .add-task-project-help {
+  margin: 0 0 14px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.add-task-project-modal .form-feedback {
+  margin: 10px 0 0;
+}
+
+.add-task-project-modal .form-feedback.visible {
+  display: block;
+}
+
+.add-task-project-modal .schedule-modal-actions {
+  justify-content: flex-end;
+}
+
+
+/* =========================================================
+   Ongoing Activity — admin live people / project progress
+   ========================================================= */
+
+#ongoingView.management-page {
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ongoing-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ongoing-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.ongoing-summary-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ongoing-summary-value {
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ongoing-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.ongoing-toolbar input,
+.ongoing-toolbar select {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.ongoing-toolbar input:focus,
+.ongoing-toolbar select:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ongoing-toolbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ongoing-toolbar select {
+  flex: 0 0 220px;
+  max-width: 100%;
+}
+
+.ongoing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ongoing-project-card,
+.ongoing-person-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.ongoing-project-card-header,
+.ongoing-person-header {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(140px, 0.8fr) 24px;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 0;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ongoing-project-card-header:hover,
+.ongoing-person-header:hover {
+  background: #f8fafc;
+}
+
+.ongoing-project-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ongoing-project-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+.ongoing-project-card-meta {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ongoing-person-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ongoing-person-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ongoing-person-meta,
+.ongoing-person-stat,
+.ongoing-project-meta,
+.ongoing-task-meta {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ongoing-person-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ongoing-person-stat {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+}
+
+.ongoing-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ongoing-progress-track {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.ongoing-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+}
+
+.ongoing-progress-label {
+  flex: 0 0 auto;
+  min-width: 36px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.ongoing-person-chevron {
+  width: 18px;
+  height: 18px;
+  color: #64748b;
+  transition: transform 0.18s ease;
+}
+
+.ongoing-project-card.is-collapsed .ongoing-person-chevron,
+.ongoing-person-card.is-collapsed .ongoing-person-chevron {
+  transform: rotate(-90deg);
+}
+
+.ongoing-project-detail,
+.ongoing-person-detail {
+  padding: 0 16px 16px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.ongoing-project-card.is-collapsed .ongoing-project-detail,
+.ongoing-person-card.is-collapsed .ongoing-person-detail,
+.ongoing-project-detail[hidden],
+.ongoing-person-detail[hidden] {
+  display: none !important;
+}
+
+.ongoing-employee-block,
+.ongoing-project-block {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.ongoing-employee-header,
+.ongoing-project-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(120px, 0.7fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.ongoing-project-name {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ongoing-progress-compact {
+  flex: 0 0 140px;
+}
+
+.ongoing-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ongoing-task-item {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) minmax(120px, 0.7fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+}
+
+.ongoing-task-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ongoing-task-status-to-do {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.ongoing-task-status-in-progress {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.ongoing-task-title {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .ongoing-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ongoing-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ongoing-toolbar select {
+    flex-basis: auto;
+  }
+
+  .ongoing-project-card-header,
+  .ongoing-person-header {
+    grid-template-columns: minmax(0, 1fr) 24px;
+    gap: 8px;
+  }
+
+  .ongoing-person-stats,
+  .ongoing-progress {
+    grid-column: 1 / -1;
+  }
+
+  .ongoing-person-chevron {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .ongoing-employee-header,
+  .ongoing-project-header {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .ongoing-task-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .ongoing-progress-compact {
+    flex-basis: 110px;
+  }
+}
