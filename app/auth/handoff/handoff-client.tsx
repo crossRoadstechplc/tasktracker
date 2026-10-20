@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PageLoader } from "@/src/components/PageLoader";
+import { TaskOpsSplash } from "@/src/components/TaskOpsSplash";
+
+const SPLASH_MIN_MS = 1600;
 
 /** One in-flight exchange per token so Strict Mode does not consume twice. */
 const handoffByToken = new Map<string, Promise<{ ok: true } | { ok: false; error: string }>>();
@@ -53,14 +55,24 @@ export default function HandoffClient() {
     }
 
     let cancelled = false;
-    void exchangeToken(token).then((result) => {
+    const startedAt = Date.now();
+
+    void (async () => {
+      const result = await exchangeToken(token);
       if (cancelled) return;
-      if (result.ok) {
-        router.replace("/");
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-      setError(result.error);
-    });
+
+      const elapsed = Date.now() - startedAt;
+      const wait = Math.max(0, SPLASH_MIN_MS - elapsed);
+      if (wait > 0) {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+      if (cancelled) return;
+      router.replace("/");
+    })();
 
     return () => {
       cancelled = true;
@@ -69,7 +81,7 @@ export default function HandoffClient() {
 
   if (error) {
     return (
-      <main style={{ padding: "2rem", fontFamily: "system-ui" }}>
+      <main className="task-ops-splash-error">
         <h1>Task Operations</h1>
         <p>{error}</p>
         <a href="/login">Go to login</a>
@@ -77,5 +89,5 @@ export default function HandoffClient() {
     );
   }
 
-  return <PageLoader label="Opening Task Operations…" />;
+  return <TaskOpsSplash label="Opening Task Operations…" />;
 }

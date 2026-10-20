@@ -17,6 +17,38 @@ export function canSeeAllProjects(role: PermissionRoleLabel): boolean {
   return role === "Super Admin" || role === "Admin";
 }
 
+export function canSeeAllTasks(role: PermissionRoleLabel): boolean {
+  return canSeeAllProjects(role);
+}
+
+export function isTaskVisibleToViewer(input: {
+  viewerStaffMemberId: string;
+  viewerRole: PermissionRoleLabel;
+  ownerStaffMemberIds: string[];
+  projectLeaderId: string | null | undefined;
+}): boolean {
+  if (canSeeAllTasks(input.viewerRole)) return true;
+  if (input.ownerStaffMemberIds.includes(input.viewerStaffMemberId)) return true;
+  if (
+    input.ownerStaffMemberIds.length === 0 &&
+    input.projectLeaderId &&
+    input.projectLeaderId === input.viewerStaffMemberId
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function taskEventRecipientStaffIds(
+  ownerStaffMemberIds: string[],
+  projectLeaderId: string | null | undefined,
+): string[] {
+  if (ownerStaffMemberIds.length > 0) {
+    return [...new Set(ownerStaffMemberIds.filter(Boolean))];
+  }
+  return projectLeaderId ? [projectLeaderId] : [];
+}
+
 /** Returns null when the viewer can see all projects; otherwise a set of accessible project IDs. */
 export async function getAccessibleProjectIds(
   workspaceId: string,
@@ -71,13 +103,28 @@ export async function assertTaskAccess(
 ): Promise<{ projectId: string }> {
   const task = await prisma.task.findFirst({
     where: { id: taskId, workspaceId },
-    select: { projectId: true },
+    select: {
+      projectId: true,
+      project: { select: { leaderId: true } },
+      owners: { select: { staffMemberId: true } },
+    },
   });
   if (!task) {
     throw new Error("Task not found.");
   }
 
   await assertProjectAccess(workspaceId, task.projectId, viewer);
+
+  const visible = isTaskVisibleToViewer({
+    viewerStaffMemberId: viewer.staffMemberId,
+    viewerRole: viewer.permissionRole,
+    ownerStaffMemberIds: task.owners.map((owner) => owner.staffMemberId),
+    projectLeaderId: task.project.leaderId,
+  });
+  if (!visible) {
+    throw new ForbiddenError("You do not have access to this task.");
+  }
+
   return { projectId: task.projectId };
 }
 
@@ -112,12 +159,7 @@ export async function assertTrashAccess(
   trashId: string,
   viewer: WorkspaceViewer,
 ): Promise<void> {
-  const accessible = await getAccessibleProjectIds(
-    workspaceId,
-    viewer.staffMemberId,
-    viewer.permissionRole,
-  );
-  if (accessible === null) return;
+  if (canSeeAllTasks(viewer.permissionRole)) return;
 
   const entry = await prisma.deletedTask.findFirst({
     where: { trashId, workspaceId },
@@ -135,9 +177,32 @@ export async function assertTrashAccess(
 
   const project = await prisma.project.findFirst({
     where: { workspaceId, name: team },
+    select: { id: true, leaderId: true },
+  });
+  if (!project) {
+    throw new ForbiddenError("You do not have access to this deleted task.");
+  }
+
+  await assertProjectAccess(workspaceId, project.id, viewer);
+
+  const ownerNames = Array.isArray(payload.owners)
+    ? payload.owners.filter((name): name is string => typeof name === "string" && name.trim().length > 0)
+    : typeof payload.owner === "string" && payload.owner.trim()
+      ? [payload.owner.trim()]
+      : [];
+
+  const staff = await prisma.staffMember.findMany({
+    where: { workspaceId, displayName: { in: ownerNames } },
     select: { id: true },
   });
-  if (!project || !accessible.has(project.id)) {
+
+  const visible = isTaskVisibleToViewer({
+    viewerStaffMemberId: viewer.staffMemberId,
+    viewerRole: viewer.permissionRole,
+    ownerStaffMemberIds: staff.map((member) => member.id),
+    projectLeaderId: project.leaderId,
+  });
+  if (!visible) {
     throw new ForbiddenError("You do not have access to this deleted task.");
   }
 }

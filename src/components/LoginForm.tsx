@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PageLoader } from "@/src/components/PageLoader";
 
 function EyeIcon({ visible }: { visible: boolean }) {
   if (visible) {
@@ -101,10 +100,6 @@ export function LoginForm() {
       setError(message);
       setLoading(false);
     }
-  }
-
-  if (loading) {
-    return <PageLoader />;
   }
 
   return (

@@ -804,8 +804,9 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
       // Moves/updates of tasks already on this client's board do not change
       // project visibility — apply incrementally instead of a full reload.
       const eventTaskId = taskIdFromEventPayload(type, data, payload.resourceId);
+      // task.updated may change owners — always reload so reassignment drops/adds correctly.
       const canApplyKnownTask =
-        (type === "task.moved" || type === "task.updated" || type === "task.update.added") &&
+        (type === "task.moved" || type === "task.update.added") &&
         Boolean(eventTaskId && knownTaskIds.has(eventTaskId));
 
       if (!canApplyKnownTask) {
@@ -945,6 +946,13 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
     eventSource.addEventListener("project.deleted", handleRemoteEvent as EventListener);
     eventSource.addEventListener("notification.created", handleRemoteEvent as EventListener);
     eventSource.addEventListener("workspace.reload", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("orgTeam.created", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("orgTeam.updated", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("orgTeam.deleted", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("staff.updated", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("staff.role.updated", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("staff.deleted", handleRemoteEvent as EventListener);
+    eventSource.addEventListener("permissions.updated", handleRemoteEvent as EventListener);
 
     eventSource.onerror = () => {
       eventSource?.close();

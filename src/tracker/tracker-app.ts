@@ -29,6 +29,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const ORG_TEAMS_STORAGE_KEY = "company-task-tracker-org-teams-v1";
       const ORG_TEAM_MEMBERS_STORAGE_KEY = "company-task-tracker-org-team-members-v1";
       const SCHEDULE_STORAGE_KEY = "company-task-tracker-schedule-v1";
+      const SCHEDULE_PREFS_STORAGE_KEY = "company-task-tracker-schedule-prefs-v1";
       const PERMISSION_MATRIX_STORAGE_KEY = "company-task-tracker-permission-matrix-v1";
       // Signed-in identity comes from the auth session. Never fall back to
       // another teammate stored in this browser — that would let a missing
@@ -552,6 +553,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       let currentFilter = "All";
       let pendingAddTaskStatus = "";
+      /** @type {null | { draggedId: string, targetStatus: string, mode: "relative" | "columnEnd", targetId?: string, placeAfter?: boolean, visibleTargetIds?: string[] }} */
+      let pendingStatusMove = null;
+      let taskDetailModalTaskId = "";
       let currentOrgTeamFilter = "All";
       let currentStaffFilter = "All";
       let currentScheduleProjectFilter = "All";
@@ -647,11 +651,29 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const scheduleEventDeleteBtn = document.getElementById("scheduleEventDeleteBtn");
       const scheduleEventCancelBtn = document.getElementById("scheduleEventCancelBtn");
       const scheduleEventSaveBtn = document.getElementById("scheduleEventSaveBtn");
+      const scheduleEventTaskHint = document.getElementById("scheduleEventTaskHint");
+      const scheduleFromDueBtn = document.getElementById("scheduleFromDueBtn");
       const tasksNavBtn = document.getElementById("tasksNavBtn");
       const sidebarBrandMark = document.getElementById("sidebarBrandMark");
       const taskFilters = document.getElementById("taskFilters");
       const workspaceTitle = document.getElementById("workspaceTitle");
       const workspaceSubtitle = document.getElementById("workspaceSubtitle");
+      const projectContextBar = document.getElementById("projectContextBar");
+      const projectContextName = document.getElementById("projectContextName");
+      const projectContextMeta = document.getElementById("projectContextMeta");
+      const projectContextStats = document.getElementById("projectContextStats");
+      const taskDetailModalBackdrop = document.getElementById("taskDetailModalBackdrop");
+      const taskDetailModalTitle = document.getElementById("taskDetailModalTitle");
+      const taskDetailModalBody = document.getElementById("taskDetailModalBody");
+      const taskDetailModalActions = document.getElementById("taskDetailModalActions");
+      const taskDetailModalClose = document.getElementById("taskDetailModalClose");
+      const moveStatusPromptBackdrop = document.getElementById("moveStatusPromptBackdrop");
+      const moveStatusPromptLead = document.getElementById("moveStatusPromptLead");
+      const moveStatusPromptInput = document.getElementById("moveStatusPromptInput");
+      const moveStatusPromptClose = document.getElementById("moveStatusPromptClose");
+      const moveStatusPromptCancelBtn = document.getElementById("moveStatusPromptCancelBtn");
+      const moveStatusPromptMoveAnywayBtn = document.getElementById("moveStatusPromptMoveAnywayBtn");
+      const moveStatusPromptSaveMoveBtn = document.getElementById("moveStatusPromptSaveMoveBtn");
 
       const SCHEDULE_HOUR_HEIGHT = 48;
       const SCHEDULE_DAY_START_HOUR = 7;
@@ -661,6 +683,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       let scheduleEditingEventId = null;
       let scheduleSelectedColor = SCHEDULE_COLORS[0];
       let scheduleSelectedGuests = [];
+      let scheduleModalFromTaskDeadline = false;
       let scheduleDragCreate = null;
       let scheduleEventDrag = null;
       let scheduleNowTimer = null;
@@ -1566,6 +1589,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         staffManagerList.innerHTML = "";
         staffManagerList.classList.add("staff-table", "staff-directory-table");
 
+        const canSeePermissionColumn =
+          getCurrentUserRole() === "Super Admin" || getCurrentUserRole() === "Admin";
+        staffManagerList.classList.toggle("staff-directory-no-permission", !canSeePermissionColumn);
+
         const header = document.createElement("div");
         header.className = "staff-table-header";
         header.innerHTML = `
@@ -1575,7 +1602,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           <div>Dept</div>
           <div>Office</div>
           <div>Workforce</div>
-          <div>Permission</div>
+          ${canSeePermissionColumn ? "<div>Permission</div>" : ""}
         `;
         staffManagerList.appendChild(header);
 
@@ -1627,76 +1654,78 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           row.appendChild(cell(profile.office || "", "staff-office-cell"));
           row.appendChild(cell(profile.workforceRole || "Employee", "staff-workforce-role-cell"));
 
-          const roleCell = document.createElement("div");
-          roleCell.className = "staff-cell staff-permission-cell";
-          const select = document.createElement("select");
-          select.className = "staff-profile-permission-role";
-          select.setAttribute("aria-label", `Permission role for ${name}`);
-          select.dataset.permission = "staff.assignRole";
-          select.dataset.permissionMode = "disable";
-          const currentRole = PERMISSION_ROLES.includes(profile.permissionRole)
-            ? profile.permissionRole
-            : DEFAULT_STAFF_PERMISSION_ROLE;
-          PERMISSION_ROLES.forEach(role => {
-            const option = document.createElement("option");
-            option.value = role;
-            option.textContent = role;
-            if (role === currentRole) option.selected = true;
-            select.appendChild(option);
-          });
-          if (!can("staff.assignRole")) select.disabled = true;
+          if (canSeePermissionColumn) {
+            const roleCell = document.createElement("div");
+            roleCell.className = "staff-cell staff-permission-cell";
+            const select = document.createElement("select");
+            select.className = "staff-profile-permission-role";
+            select.setAttribute("aria-label", `Permission role for ${name}`);
+            select.dataset.permission = "staff.assignRole";
+            select.dataset.permissionMode = "disable";
+            const currentRole = PERMISSION_ROLES.includes(profile.permissionRole)
+              ? profile.permissionRole
+              : DEFAULT_STAFF_PERMISSION_ROLE;
+            PERMISSION_ROLES.forEach(role => {
+              const option = document.createElement("option");
+              option.value = role;
+              option.textContent = role;
+              if (role === currentRole) option.selected = true;
+              select.appendChild(option);
+            });
+            if (!can("staff.assignRole")) select.disabled = true;
 
-          select.addEventListener("change", async () => {
-            if (!can("staff.assignRole")) {
-              select.value = currentRole;
-              return;
-            }
-            const nextPermissionRole = select.value;
-            const wasLastSuperAdmin = profile.permissionRole === "Super Admin" &&
-              nextPermissionRole !== "Super Admin" &&
-              staff.filter(n => n !== name).every(n => staffProfiles[n]?.permissionRole !== "Super Admin");
-            if (wasLastSuperAdmin && !confirm(
-              `${name} is the only Super Admin. Removing this role means no one will be able to reach Settings unless another Super Admin is assigned first. Continue?`
-            )) {
-              select.value = currentRole;
-              return;
-            }
-            const staffId = staffIds[name];
-            if (!staffId) {
-              window.alert("Could not save — team member id missing. Refresh and try again.");
-              select.value = currentRole;
-              return;
-            }
-            select.disabled = true;
-            try {
-              await settingsSync.updateStaffRole(staffId, nextPermissionRole);
-              staffProfiles[name] = {
-                ...staffProfiles[name],
-                firstName: profile.firstName,
-                lastName: profile.lastName,
-                role: profile.role,
-                permissionRole: nextPermissionRole,
-                email: profile.email,
-                department: profile.department,
-                office: profile.office,
-                workforceRole: profile.workforceRole,
-                employeeCode: profile.employeeCode
-              };
-              saveStaffProfiles();
-              refreshPermissionsUi();
-              renderStaffManager();
-              render();
-            } catch (error) {
-              console.error("Permission role save failed.", error);
-              select.value = currentRole;
-              window.alert(error instanceof Error ? error.message : "Could not update permission role.");
-            } finally {
-              select.disabled = !can("staff.assignRole");
-            }
-          });
+            select.addEventListener("change", async () => {
+              if (!can("staff.assignRole")) {
+                select.value = currentRole;
+                return;
+              }
+              const nextPermissionRole = select.value;
+              const wasLastSuperAdmin = profile.permissionRole === "Super Admin" &&
+                nextPermissionRole !== "Super Admin" &&
+                staff.filter(n => n !== name).every(n => staffProfiles[n]?.permissionRole !== "Super Admin");
+              if (wasLastSuperAdmin && !confirm(
+                `${name} is the only Super Admin. Removing this role means no one will be able to reach Settings unless another Super Admin is assigned first. Continue?`
+              )) {
+                select.value = currentRole;
+                return;
+              }
+              const staffId = staffIds[name];
+              if (!staffId) {
+                window.alert("Could not save — team member id missing. Refresh and try again.");
+                select.value = currentRole;
+                return;
+              }
+              select.disabled = true;
+              try {
+                await settingsSync.updateStaffRole(staffId, nextPermissionRole);
+                staffProfiles[name] = {
+                  ...staffProfiles[name],
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
+                  role: profile.role,
+                  permissionRole: nextPermissionRole,
+                  email: profile.email,
+                  department: profile.department,
+                  office: profile.office,
+                  workforceRole: profile.workforceRole,
+                  employeeCode: profile.employeeCode
+                };
+                saveStaffProfiles();
+                refreshPermissionsUi();
+                renderStaffManager();
+                render();
+              } catch (error) {
+                console.error("Permission role save failed.", error);
+                select.value = currentRole;
+                window.alert(error instanceof Error ? error.message : "Could not update permission role.");
+              } finally {
+                select.disabled = !can("staff.assignRole");
+              }
+            });
 
-          roleCell.appendChild(select);
-          row.appendChild(roleCell);
+            roleCell.appendChild(select);
+            row.appendChild(roleCell);
+          }
           staffManagerList.appendChild(row);
         });
 
@@ -2252,11 +2281,170 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         return next;
       }
 
+      function getRememberedScheduleTimes() {
+        const defaults = { startTime: "09:00", endTime: "10:00" };
+        try {
+          const raw = localStorage.getItem(SCHEDULE_PREFS_STORAGE_KEY);
+          if (!raw) return defaults;
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.startTime === "string" && typeof parsed.endTime === "string") {
+            return { startTime: parsed.startTime, endTime: parsed.endTime };
+          }
+        } catch (error) {
+          // ignore corrupt prefs
+        }
+        return defaults;
+      }
+
+      function rememberScheduleTimes(startTime, endTime) {
+        if (!startTime || !endTime) return;
+        localStorage.setItem(
+          SCHEDULE_PREFS_STORAGE_KEY,
+          JSON.stringify({ startTime, endTime })
+        );
+      }
+
+      function taskDeadlineDate(task) {
+        if (!task?.due) return null;
+        return parseDateInputValue(String(task.due).slice(0, 10));
+      }
+
+      function buildTaskScheduleDescription(task) {
+        const latest = latestTaskUpdate(task);
+        const lines = [
+          `Deadline: ${task.due ? formatDue(task.due) : "No due date"}`,
+          `Status: ${displayStatusLabel(task.status || "To Do")}`,
+          `Project: ${task.team || "—"}`,
+          ""
+        ];
+
+        if (typeof task.description === "string" && task.description.trim()) {
+          lines.push("--- Task description ---", task.description.trim(), "");
+        }
+
+        if (latest?.text) {
+          lines.push("--- Latest update ---", String(latest.text).trim());
+        }
+
+        return lines.join("\n").trim();
+      }
+
+      function buildScheduleDraftFromTask(task) {
+        const deadline = taskDeadlineDate(task);
+        if (!deadline) return null;
+
+        const { startTime, endTime } = getRememberedScheduleTimes();
+        const start = applyTimeToDate(deadline, startTime);
+        let end = applyTimeToDate(deadline, endTime);
+        if (end <= start) end = new Date(start.getTime() + 60 * 60 * 1000);
+
+        const project =
+          task.team && teams.includes(task.team) ? task.team : "";
+
+        const guests = [...new Set(taskOwners(task).filter(name => staff.includes(name)))];
+
+        return {
+          id: crypto.randomUUID(),
+          title: (task.title || "").trim() || "(No title)",
+          start: toLocalDateTimeValue(start),
+          end: toLocalDateTimeValue(end),
+          allDay: false,
+          description: buildTaskScheduleDescription(task),
+          location: "",
+          project,
+          color: SCHEDULE_COLORS[0],
+          guests
+        };
+      }
+
+      function scheduleEventMatchesTaskDeadline(event, task) {
+        const deadline = taskDeadlineDate(task);
+        if (!deadline) return false;
+        const eventDay = toDateKey(eventStartDate(event));
+        const deadlineDay = toDateKey(deadline);
+        const sameDay = eventDay === deadlineDay;
+        const sameTitle = (event.title || "").trim() === (task.title || "").trim();
+        return sameDay && sameTitle;
+      }
+
+      function openScheduleFromTask(taskId, { closeTaskDetail = true } = {}) {
+        if (!can("schedule.create")) return false;
+
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return false;
+
+        if (!taskDeadlineDate(task)) {
+          window.alert(
+            "Set a due date on this task first. Schedule events are placed on that deadline day."
+          );
+          return false;
+        }
+
+        const draft = buildScheduleDraftFromTask(task);
+        if (!draft) return false;
+
+        scheduleWeekStart = startOfWeekMonday(taskDeadlineDate(task));
+        scheduleModalFromTaskDeadline = true;
+
+        if (closeTaskDetail) closeTaskDetailModal();
+        switchWorkspaceView("schedule");
+        renderScheduleView();
+        openScheduleModal(draft, true);
+        return true;
+      }
+
+      function addScheduleEventsFromTaskDeadlinesThisWeek() {
+        if (!can("schedule.create")) return;
+
+        const days = scheduleWeekDays();
+        const weekStart = days[0];
+        const weekEndExclusive = addDays(days[6], 1);
+
+        const candidates = tasks.filter(task => {
+          if (task.status === "Done") return false;
+          const deadline = taskDeadlineDate(task);
+          if (!deadline || deadline < weekStart || deadline >= weekEndExclusive) return false;
+
+          if (
+            currentScheduleProjectFilter !== "All" &&
+            task.team !== currentScheduleProjectFilter
+          ) {
+            return false;
+          }
+
+          return !schedule.events.some(event => scheduleEventMatchesTaskDeadline(event, task));
+        });
+
+        if (!candidates.length) {
+          window.alert(
+            "No open tasks with a deadline in this week, or matching events already exist on those due dates."
+          );
+          return;
+        }
+
+        const createdIds = [];
+        candidates.forEach(task => {
+          const draft = buildScheduleDraftFromTask(task);
+          if (!draft) return;
+          schedule.events.push(draft);
+          createdIds.push(draft.id);
+        });
+
+        saveSchedule();
+        renderScheduleView();
+        createdIds.forEach(id => void trackerSync.syncScheduleEvent(id));
+      }
+
       function openScheduleModal(eventData, isNew = false) {
         scheduleEditingEventId = isNew ? null : eventData.id;
         scheduleSelectedColor = eventData.color || SCHEDULE_COLORS[0];
         scheduleSelectedGuests = [...(eventData.guests || [])];
-        scheduleModalTitle.textContent = isNew ? "New event" : "Event";
+        scheduleModalTitle.textContent = isNew
+          ? (scheduleModalFromTaskDeadline ? "Schedule on deadline" : "New event")
+          : "Event";
+        if (scheduleEventTaskHint) {
+          scheduleEventTaskHint.hidden = !(isNew && scheduleModalFromTaskDeadline);
+        }
         scheduleEventTitle.value = eventData.title || "";
         scheduleEventAllDay.checked = Boolean(eventData.allDay);
         scheduleEventLocation.value = eventData.location || "";
@@ -2317,6 +2505,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         scheduleModalBackdrop.hidden = true;
         scheduleEditingEventId = null;
         scheduleSelectedGuests = [];
+        scheduleModalFromTaskDeadline = false;
+        if (scheduleEventTaskHint) scheduleEventTaskHint.hidden = true;
       }
 
       function renderScheduleProjectDropdown() {
@@ -2458,6 +2648,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           start = applyTimeToDate(date, scheduleEventStartTime.value);
           end = applyTimeToDate(date, scheduleEventEndTime.value);
           if (end <= start) end = new Date(start.getTime() + 60 * 60 * 1000);
+          rememberScheduleTimes(scheduleEventStartTime.value, scheduleEventEndTime.value);
         }
 
         const payload = {
@@ -4165,6 +4356,55 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           currentFilter === "All" &&
           currentOrgTeamFilter === "All" &&
           currentStaffFilter === "All";
+        updateProjectContextBar();
+        updateTasksWorkspaceSubtitle();
+      }
+
+      function updateTasksWorkspaceSubtitle() {
+        if (!workspaceSubtitle || !tasksView.classList.contains("active")) return;
+        if (currentFilter === "All") {
+          workspaceSubtitle.textContent =
+            "Combine project, team, and team member filters, then manage tasks by status";
+          return;
+        }
+        workspaceSubtitle.textContent =
+          `Focused on ${currentFilter} — open a card for details or add updates when work starts`;
+      }
+
+      function updateProjectContextBar() {
+        if (!projectContextBar || !projectContextName || !projectContextMeta || !projectContextStats) return;
+
+        if (currentFilter === "All" || !tasksView.classList.contains("active")) {
+          projectContextBar.hidden = true;
+          return;
+        }
+
+        const projectName = currentFilter;
+        const projectTasks = tasks.filter(task => (task.team || "Unassigned") === projectName);
+        const openTasks = projectTasks.filter(task => task.status !== "Done");
+        const todoCount = openTasks.filter(task => task.status === "To Do").length;
+        const inProgressCount = openTasks.filter(task => task.status === "In Progress").length;
+        const doneCount = projectTasks.filter(task => task.status === "Done").length;
+        const memberCount = (teamMembers[projectName] || []).length;
+        const leader = (teamLeaders[projectName] || "").trim();
+
+        projectContextBar.hidden = false;
+        projectContextName.textContent = projectName;
+
+        const memberLabel = memberCount === 1 ? "1 member" : `${memberCount} members`;
+        if (leader) {
+          projectContextMeta.textContent =
+            `Led by ${leader} · ${memberLabel} · tasks and updates for this project`;
+        } else {
+          projectContextMeta.textContent =
+            `${memberLabel} on this project · use updates to show progress in real time`;
+        }
+
+        projectContextStats.innerHTML = `
+          <span class="project-context-stat"><strong>${todoCount}</strong> to do</span>
+          <span class="project-context-stat"><strong>${inProgressCount}</strong> in progress</span>
+          <span class="project-context-stat"><strong>${doneCount}</strong> done</span>
+        `;
       }
 
       function clearTaskDropIndicators() {
@@ -4215,6 +4455,233 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
 
         tasks.push(draggedTask);
+      }
+
+      function taskNeedsUpdatePromptWhenStarting(task) {
+        return ensureTaskUpdates(task).length === 0;
+      }
+
+      function finishTaskMoveAfterDrop(move) {
+        if (!move?.draggedId) return;
+
+        const draggedId = move.draggedId;
+        const targetStatus = move.targetStatus;
+        const wasCompleted = tasks.find(t => t.id === draggedId)?.status === "Done";
+
+        if (move.mode === "relative" && move.targetId) {
+          moveTaskRelative(draggedId, move.targetId, targetStatus, !!move.placeAfter);
+        } else {
+          moveTaskToColumnEnd(draggedId, targetStatus, move.visibleTargetIds || []);
+        }
+
+        clearTaskDropIndicators();
+        document.querySelector(".task.dragging")?.classList.remove("dragging");
+        persistTasksLocally();
+        void trackerSync.syncTaskMove(draggedId, targetStatus);
+        render();
+
+        if (!wasCompleted && targetStatus === "Done") celebrateTaskCompletion(draggedId);
+      }
+
+      function requestTaskStatusMove(move) {
+        const task = tasks.find(t => t.id === move?.draggedId);
+        if (!task) return;
+
+        const startingWork =
+          task.status === "To Do" &&
+          move.targetStatus === "In Progress" &&
+          taskNeedsUpdatePromptWhenStarting(task);
+
+        if (startingWork) {
+          pendingStatusMove = move;
+          openMoveStatusPromptModal(task);
+          return;
+        }
+
+        finishTaskMoveAfterDrop(move);
+      }
+
+      function closeMoveStatusPromptModal() {
+        if (!moveStatusPromptBackdrop) return;
+        moveStatusPromptBackdrop.hidden = true;
+        if (moveStatusPromptInput) moveStatusPromptInput.value = "";
+        pendingStatusMove = null;
+      }
+
+      function openMoveStatusPromptModal(task) {
+        if (!moveStatusPromptBackdrop || !moveStatusPromptLead) return;
+
+        const title = task?.title || "this task";
+        moveStatusPromptLead.textContent =
+          `"${title}" has no updates yet. Add a short note about what you're starting (recommended), or move without an update.`;
+
+        if (moveStatusPromptInput) {
+          moveStatusPromptInput.value = "";
+        }
+
+        moveStatusPromptBackdrop.hidden = false;
+        requestAnimationFrame(() => moveStatusPromptInput?.focus());
+      }
+
+      function appendTaskUpdateToTask(taskId, text) {
+        const trimmed = (text || "").trim();
+        if (!trimmed) return false;
+
+        const index = tasks.findIndex(t => t.id === taskId);
+        if (index < 0) return false;
+
+        const existingUpdates = ensureTaskUpdates(tasks[index]);
+        tasks[index] = {
+          ...tasks[index],
+          updates: [
+            ...existingUpdates,
+            {
+              id: crypto.randomUUID(),
+              text: trimmed,
+              createdAt: new Date().toISOString()
+            }
+          ]
+        };
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        void trackerSync.syncTaskUpdate(taskId, trimmed);
+        return true;
+      }
+
+      function closeTaskDetailModal() {
+        if (!taskDetailModalBackdrop) return;
+        taskDetailModalBackdrop.hidden = true;
+        taskDetailModalTaskId = "";
+      }
+
+      function renderTaskDetailModal(taskId) {
+        if (!taskDetailModalBody || !taskDetailModalTitle || !taskDetailModalActions) return;
+
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) {
+          closeTaskDetailModal();
+          return;
+        }
+
+        taskDetailModalTaskId = taskId;
+        taskDetailModalTitle.textContent = task.title || "Task details";
+
+        const descriptionBlock = typeof task.description === "string" && task.description.trim()
+          ? `<div class="task-detail-description">${escapeHtml(task.description.trim())}</div>`
+          : `<p class="task-detail-description" style="color:#777;font-style:italic;">No description</p>`;
+
+        taskDetailModalBody.innerHTML = `
+          <div class="task-detail-meta-grid">
+            <div class="task-detail-meta-item">
+              <span>Status</span>
+              <span>${escapeHtml(displayStatusLabel(task.status))}</span>
+            </div>
+            <div class="task-detail-meta-item">
+              <span>Project</span>
+              <span class="tag tag-project">${escapeHtml(task.team || "No project")}</span>
+            </div>
+            <div class="task-detail-meta-item">
+              <span>Priority</span>
+              <span class="tag ${priorityClass(task.priority)}">${escapeHtml(task.priority || "Low")}</span>
+            </div>
+            <div class="task-detail-meta-item">
+              <span>Due</span>
+              <span>${escapeHtml(formatDue(task.due))}</span>
+            </div>
+            <div class="task-detail-meta-item" style="grid-column: 1 / -1;">
+              <span>Owners</span>
+              <span>${escapeHtml(ownerDisplayLabel(task) || "Unassigned")}</span>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="task-detail-updates-title">About</h4>
+            ${descriptionBlock}
+          </div>
+
+          <div>
+            <h4 class="task-detail-updates-title">Updates</h4>
+            ${updatesHtml(task)}
+          </div>
+
+          <div class="task-detail-add-update" data-permission="tasks.addUpdate">
+            <label for="taskDetailUpdateInput">Add update</label>
+            <textarea id="taskDetailUpdateInput" placeholder="Share progress, blockers, or next steps…"></textarea>
+            <div class="task-detail-add-update-actions">
+              <button type="button" class="btn-primary" id="taskDetailUpdateSaveBtn" data-permission="tasks.addUpdate">Post update</button>
+            </div>
+          </div>
+        `;
+
+        applyPermissionGating(taskDetailModalBody);
+
+        taskDetailModalActions.innerHTML = `
+          <button type="button" class="btn-secondary" id="taskDetailCloseBtn">Close</button>
+          ${can("schedule.create") && task.status !== "Done"
+            ? `<button type="button" class="btn-secondary" id="taskDetailScheduleBtn" data-permission="schedule.create">Schedule on deadline</button>`
+            : ""}
+          ${can("tasks.edit") && task.status !== "Done" ? '<button type="button" class="btn-secondary" id="taskDetailEditBtn">Edit on board</button>' : ""}
+          ${can("tasks.delete") ? `<button type="button" class="btn-secondary" id="taskDetailDeleteBtn">${task.status === "Done" ? "Archive" : "Delete"}</button>` : ""}
+        `;
+
+        applyPermissionGating(taskDetailModalActions);
+
+        const updateSaveBtn = taskDetailModalBody.querySelector("#taskDetailUpdateSaveBtn");
+        const updateInput = taskDetailModalBody.querySelector("#taskDetailUpdateInput");
+        const closeBtn = taskDetailModalActions.querySelector("#taskDetailCloseBtn");
+        const scheduleBtn = taskDetailModalActions.querySelector("#taskDetailScheduleBtn");
+
+        if (scheduleBtn && !taskDeadlineDate(task)) {
+          scheduleBtn.disabled = true;
+          scheduleBtn.title =
+            "Add a due date on this task first — the event is placed on that deadline day.";
+        } else if (scheduleBtn) {
+          scheduleBtn.title = "Create a calendar event on this task's due date (deadline)";
+        }
+        const editBtn = taskDetailModalActions.querySelector("#taskDetailEditBtn");
+        const deleteBtn = taskDetailModalActions.querySelector("#taskDetailDeleteBtn");
+
+        updateSaveBtn?.addEventListener("click", () => {
+          if (!can("tasks.addUpdate")) return;
+          const text = updateInput?.value || "";
+          if (!appendTaskUpdateToTask(taskId, text)) {
+            updateInput?.focus();
+            return;
+          }
+          renderTaskDetailModal(taskId);
+        });
+
+        updateInput?.addEventListener("keydown", e => {
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            updateSaveBtn?.click();
+          }
+        });
+
+        closeBtn?.addEventListener("click", () => closeTaskDetailModal());
+
+        scheduleBtn?.addEventListener("click", () => {
+          openScheduleFromTask(taskId, { closeTaskDetail: true });
+        });
+
+        editBtn?.addEventListener("click", () => {
+          sessionStorage.setItem("task-tracker-open-editor", taskId);
+          closeTaskDetailModal();
+          render();
+        });
+
+        deleteBtn?.addEventListener("click", () => {
+          closeTaskDetailModal();
+          const card = document.querySelector(`.task[data-id="${taskId}"]`);
+          card?.querySelector(".delete-btn")?.click();
+        });
+      }
+
+      function openTaskDetailModal(taskId) {
+        if (!taskDetailModalBackdrop) return;
+        renderTaskDetailModal(taskId);
+        taskDetailModalBackdrop.hidden = false;
       }
 
       function populateTeamFilter() {
@@ -4333,6 +4800,52 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
 
         return `Due: ${day} ${month}`;
+      }
+
+      function dueDateToneClass(date) {
+        if (!date) return "due-muted";
+
+        const due = new Date(date + "T00:00:00");
+        if (Number.isNaN(due.getTime())) return "due-muted";
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const mondayOffset = (today.getDay() + 6) % 7;
+        const thisWeekStart = new Date(today);
+        thisWeekStart.setDate(today.getDate() - mondayOffset);
+        const nextWeekStart = new Date(thisWeekStart);
+        nextWeekStart.setDate(thisWeekStart.getDate() + 7);
+
+        if (due < today) return "due-overdue";
+        if (due >= thisWeekStart && due < nextWeekStart) return "due-soon";
+        return "";
+      }
+
+      function latestTaskUpdate(task) {
+        const updates = ensureTaskUpdates(task);
+        if (!updates.length) return null;
+        return [...updates].sort(
+          (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        )[0];
+      }
+
+      function taskUpdatePreviewMarkup(task) {
+        const latest = latestTaskUpdate(task);
+        if (!latest?.text) {
+          return `<div class="task-updates-preview is-empty">No updates yet — add one when you start work</div>`;
+        }
+
+        const preview = latest.text.length > 120 ? `${latest.text.slice(0, 117)}…` : latest.text;
+        const timeLabel = isTodayTimestamp(latest.createdAt)
+          ? `Updated today · ${hoursAgoLabel(latest.createdAt)}`
+          : formatUpdateTimestamp(latest.createdAt);
+
+        return `
+          <div class="task-updates-preview">
+            ${escapeHtml(preview)}
+            <time>${escapeHtml(timeLabel)}</time>
+          </div>
+        `;
       }
 
       function escapeHtml(value = "") {
@@ -4473,17 +4986,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           const statusKey = status.replace(/\s+/g, "-").toLowerCase();
 
+          const showColumnAdd = status === "To Do";
+
           column.innerHTML = `
             <div class="column-header">
               <div class="column-title-wrap">
                 <div class="column-title">${displayStatusLabel(status)}</div>
-                <button
+                ${showColumnAdd ? `<button
                   type="button"
                   class="column-add-btn"
                   data-permission="tasks.create"
                   data-permission-mode="disable"
                   title="${currentFilter === "All" ? "Add task — choose a project" : "Add task to " + status}"
-                >+ Add</button>
+                >+ Add</button>` : ""}
               </div>
               <div class="count">${inColumn.length}</div>
             </div>
@@ -4506,7 +5021,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                     </div>
 
                     <div>
-                      <label>Owners</label>
+                      <label>Owners <span class="optional-label">(optional — leave empty for Unassigned)</span></label>
                       <details class="inline-owner owner-checklist">
                         ${ownerChecklistInnerHtml(currentFilter, [])}
                       </details>
@@ -4588,14 +5103,16 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             setTimeout(resetInlineEditor, 220);
           }
 
-          addBtn.addEventListener("click", () => {
-            if (!can("tasks.create")) return;
-            if (editor.classList.contains("open") && !idInput.value) {
-              closeInlineEditor();
-            } else {
-              openInlineEditor();
-            }
-          });
+          if (addBtn) {
+            addBtn.addEventListener("click", () => {
+              if (!can("tasks.create")) return;
+              if (editor.classList.contains("open") && !idInput.value) {
+                closeInlineEditor();
+              } else {
+                openInlineEditor();
+              }
+            });
+          }
 
           if (pendingAddTaskStatus === status && currentFilter !== "All") {
             pendingAddTaskStatus = "";
@@ -4660,9 +5177,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
           inColumn.forEach(task => {
             const card = document.createElement("article");
-            card.className = "task";
+            card.className = "task task-card-clickable";
             card.draggable = false;
             card.dataset.id = task.id;
+            card.setAttribute("role", "button");
+            card.setAttribute("tabindex", "0");
+            card.setAttribute("aria-label", `Open details for ${task.title || "task"}`);
 
 
 
@@ -4691,9 +5211,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   ` : ""}
                 </div>
                 <div class="tags">
-                  <span class="tag">${escapeHtml(task.team || "No project")}</span>
+                  <span class="tag tag-project" title="Project">${escapeHtml(task.team || "No project")}</span>
                   ${priorityTagHtml}
                 </div>
+
+                ${taskUpdatePreviewMarkup(task)}
 
                 <div class="task-updates">
                   <div class="task-updates-header">
@@ -4723,7 +5245,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                     <div class="task-owners${(isCompletedTask || !canEditTasks) ? "" : " task-owners-quick-trigger"}"${(isCompletedTask || !canEditTasks) ? "" : ' title="Click to change owners"'}>
                       ${"Owners: " + escapeHtml(ownerDisplayLabel(task) || "Unassigned")}
                     </div>
-                    <div class="task-due${(isCompletedTask || !canEditTasks) ? "" : " task-due-quick-trigger"}"${(isCompletedTask || !canEditTasks) ? "" : ' title="Click to change due date"'}>${escapeHtml(formatDue(task.due))}</div>
+                    <div class="task-due ${dueDateToneClass(task.due)}${(isCompletedTask || !canEditTasks) ? "" : " task-due-quick-trigger"}"${(isCompletedTask || !canEditTasks) ? "" : ' title="Click to change due date"'}>${escapeHtml(formatDue(task.due))}</div>
                   </div>
                   <div class="actions">
                     ${(isCompletedTask || !canEditTasks) ? "" : '<button class="icon-btn edit-btn" type="button" data-permission="tasks.edit">Edit</button>'}
@@ -4758,12 +5280,27 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               card.addEventListener("mousedown", e => {
                 if (card.classList.contains("editing")) return;
 
-                if (e.target.closest("button, input, select, textarea, details, summary, .quick-editable-title, .priority-quick-trigger, .task-owners-quick-trigger, .task-due-quick-trigger")) {
+                if (e.target.closest("button, input, select, textarea, details, summary, .quick-editable-title, .priority-quick-trigger, .task-owners-quick-trigger, .task-due-quick-trigger, .task-updates-expand, .task-update-toggle, .task-update-input")) {
                   card.draggable = false;
                   return;
                 }
 
                 card.draggable = true;
+              });
+
+              card.addEventListener("click", e => {
+                if (card.classList.contains("editing") || card.classList.contains("dragging")) return;
+                if (e.target.closest("button, input, select, textarea, .quick-editable-title, .priority-quick-trigger, .task-owners-quick-trigger, .task-due-quick-trigger, .task-updates-expand, .task-update-toggle, .task-update-input, .task-update-save, .task-update-cancel, .edit-btn, .delete-btn, .task-info-btn")) {
+                  return;
+                }
+                openTaskDetailModal(task.id);
+              });
+
+              card.addEventListener("keydown", e => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                if (e.target !== card) return;
+                e.preventDefault();
+                openTaskDetailModal(task.id);
               });
 
               [infoBtn, editBtn, deleteBtn, updatesExpand, updateToggle, updateCancel, updateSave]
@@ -5200,31 +5737,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                 if (!can("tasks.addUpdate")) return;
 
                 const text = updateInput.value.trim();
-                if (!text) {
+                if (!appendTaskUpdateToTask(task.id, text)) {
                   updateInput.focus();
                   return;
                 }
 
-                const index = tasks.findIndex(t => t.id === task.id);
-                if (index < 0) return;
-
-                const existingUpdates = ensureTaskUpdates(tasks[index]);
-
-                tasks[index] = {
-                  ...tasks[index],
-                  updates: [
-                    ...existingUpdates,
-                    {
-                      id: crypto.randomUUID(),
-                      text,
-                      createdAt: new Date().toISOString()
-                    }
-                  ]
-                };
-
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-                localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
-                void trackerSync.syncTaskUpdate(task.id, text);
                 sessionStorage.setItem("task-tracker-open-updates", task.id);
                 render();
               });
@@ -5302,7 +5819,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                     </div>
 
                     <div>
-                      <label>Owners</label>
+                      <label>Owners <span class="optional-label">(optional — leave empty for Unassigned)</span></label>
                       <details class="card-edit-owner owner-checklist">
                         ${ownerChecklistInnerHtml(task.team || currentFilter, taskOwners(task))}
                       </details>
@@ -5419,17 +5936,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               const placeAfter = e.clientY > rect.top + rect.height / 2;
 
               const draggedId = dragged.dataset.id;
-              const wasCompleted = tasks.find(t => t.id === draggedId)?.status === "Done";
 
-              moveTaskRelative(draggedId, task.id, status, placeAfter);
-              clearTaskDropIndicators();
-              // Local persist only — move uses /move (tasks.move). Do not schedule
-              // detail sync/PATCH here (that needs tasks.edit and 403s for staff).
-              persistTasksLocally();
-              void trackerSync.syncTaskMove(draggedId, status);
-              render();
-
-              if (!wasCompleted && status === "Done") celebrateTaskCompletion(draggedId);
+              requestTaskStatusMove({
+                draggedId,
+                targetStatus: status,
+                mode: "relative",
+                targetId: task.id,
+                placeAfter
+              });
             });
 
             card.addEventListener("dragend", () => {
@@ -5443,6 +5957,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             });
 
             renderTaskCardView();
+
+            if (sessionStorage.getItem("task-tracker-open-editor") === task.id) {
+              sessionStorage.removeItem("task-tracker-open-editor");
+              if (!isCompletedTask && canEditTasks) renderTaskCardEditor();
+            }
 
             list.appendChild(card);
           });
@@ -5480,15 +5999,13 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               .filter(Boolean);
 
             const draggedId = dragged.dataset.id;
-            const wasCompleted = tasks.find(t => t.id === draggedId)?.status === "Done";
 
-            moveTaskToColumnEnd(draggedId, status, visibleTargetIds);
-            clearTaskDropIndicators();
-            persistTasksLocally();
-            void trackerSync.syncTaskMove(draggedId, status);
-            render();
-
-            if (!wasCompleted && status === "Done") celebrateTaskCompletion(draggedId);
+            requestTaskStatusMove({
+              draggedId,
+              targetStatus: status,
+              mode: "columnEnd",
+              visibleTargetIds
+            });
           });
 
           board.appendChild(column);
@@ -5500,6 +6017,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
 
         applyPermissionGating();
+
+        if (taskDetailModalTaskId && taskDetailModalBackdrop && !taskDetailModalBackdrop.hidden) {
+          renderTaskDetailModal(taskDetailModalTaskId);
+        }
       }
 
 
@@ -5711,6 +6232,63 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         });
       }
 
+      const completePendingStatusMove = (withUpdateText = "") => {
+        const move = pendingStatusMove;
+        if (!move) return;
+
+        if (withUpdateText.trim()) {
+          appendTaskUpdateToTask(move.draggedId, withUpdateText);
+        }
+
+        closeMoveStatusPromptModal();
+        finishTaskMoveAfterDrop(move);
+      };
+
+      if (moveStatusPromptSaveMoveBtn) {
+        moveStatusPromptSaveMoveBtn.addEventListener("click", () => {
+          const text = moveStatusPromptInput?.value || "";
+          if (!text.trim()) {
+            moveStatusPromptInput?.focus();
+            return;
+          }
+          completePendingStatusMove(text);
+        });
+      }
+
+      if (moveStatusPromptMoveAnywayBtn) {
+        moveStatusPromptMoveAnywayBtn.addEventListener("click", () => {
+          completePendingStatusMove("");
+        });
+      }
+
+      const cancelPendingStatusMove = () => {
+        pendingStatusMove = null;
+        closeMoveStatusPromptModal();
+        clearTaskDropIndicators();
+        document.querySelector(".task.dragging")?.classList.remove("dragging");
+      };
+
+      if (moveStatusPromptCancelBtn) {
+        moveStatusPromptCancelBtn.addEventListener("click", cancelPendingStatusMove);
+      }
+      if (moveStatusPromptClose) {
+        moveStatusPromptClose.addEventListener("click", cancelPendingStatusMove);
+      }
+      if (moveStatusPromptBackdrop) {
+        moveStatusPromptBackdrop.addEventListener("click", event => {
+          if (event.target === moveStatusPromptBackdrop) cancelPendingStatusMove();
+        });
+      }
+
+      if (taskDetailModalClose) {
+        taskDetailModalClose.addEventListener("click", () => closeTaskDetailModal());
+      }
+      if (taskDetailModalBackdrop) {
+        taskDetailModalBackdrop.addEventListener("click", event => {
+          if (event.target === taskDetailModalBackdrop) closeTaskDetailModal();
+        });
+      }
+
       // Project and Team describe overlapping groupings, so only one narrows the
       // board at a time. Team Member stacks with whichever is active.
       teamFilter.addEventListener("change", () => {
@@ -5838,12 +6416,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       scheduleNextBtn.addEventListener("click", () => shiftScheduleWeek(1));
       scheduleCreateBtn.addEventListener("click", () => {
         if (!can("schedule.create")) return;
+        scheduleModalFromTaskDeadline = false;
         const now = new Date();
         now.setMinutes(0, 0, 0);
         if (now.getHours() < SCHEDULE_DAY_START_HOUR) now.setHours(SCHEDULE_DAY_START_HOUR);
         const end = new Date(now.getTime() + 60 * 60 * 1000);
         openScheduleModal(createDraftEvent(now, end, false), true);
       });
+
+      if (scheduleFromDueBtn) {
+        scheduleFromDueBtn.addEventListener("click", () => {
+          addScheduleEventsFromTaskDeadlinesThisWeek();
+        });
+      }
 
       scheduleModalClose.addEventListener("click", closeScheduleModal);
       scheduleEventCancelBtn.addEventListener("click", closeScheduleModal);
@@ -5898,6 +6483,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (event.key === "Escape" && addTaskProjectModalBackdrop && !addTaskProjectModalBackdrop.hidden) {
           pendingAddTaskStatus = "";
           closeAddTaskProjectModal();
+          return;
+        }
+        if (event.key === "Escape" && moveStatusPromptBackdrop && !moveStatusPromptBackdrop.hidden) {
+          cancelPendingStatusMove();
+          return;
+        }
+        if (event.key === "Escape" && taskDetailModalBackdrop && !taskDetailModalBackdrop.hidden) {
+          closeTaskDetailModal();
           return;
         }
         if (event.key === "Escape" && !scheduleModalBackdrop.hidden) {

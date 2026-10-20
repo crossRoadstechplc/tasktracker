@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AuthUserResponse } from "@/src/lib/auth/types";
 import type { WorkspaceData } from "@/src/types/workspace";
 import { TRACKER_SHELL_HTML } from "@/src/tracker/tracker-shell";
-import { PageLoader } from "@/src/components/PageLoader";
+import { TrackerSkeleton } from "@/src/components/TrackerSkeleton";
 
 type LoadState =
   | { status: "loading" }
@@ -129,7 +129,7 @@ export function TrackerApp() {
   }, [loadState]);
 
   if (loadState.status === "loading") {
-    return <PageLoader />;
+    return <TrackerSkeleton />;
   }
 
   if (loadState.status === "error") {

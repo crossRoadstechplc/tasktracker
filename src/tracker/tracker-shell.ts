@@ -210,6 +210,14 @@ export const TRACKER_SHELL_HTML = `
 
   <main class="workspace-main">
     <section class="workspace-view active" id="tasksView">
+      <div class="project-context-bar" id="projectContextBar" hidden>
+        <div class="project-context-main">
+          <span class="project-context-eyebrow">Active project</span>
+          <h2 class="project-context-name" id="projectContextName"></h2>
+          <p class="project-context-meta" id="projectContextMeta"></p>
+        </div>
+        <div class="project-context-stats" id="projectContextStats" aria-label="Project task counts"></div>
+      </div>
 <div class="board-wrap">
         <div class="board" id="board"></div>
       </div>
@@ -294,6 +302,7 @@ export const TRACKER_SHELL_HTML = `
         </div>
         <div class="schedule-toolbar-right">
           <span class="schedule-view-label">Week</span>
+          <button type="button" class="btn-secondary" id="scheduleFromDueBtn" data-permission="schedule.create" title="Create events on each task's due date (deadline) for this week">From deadlines</button>
           <button type="button" class="btn-primary" id="scheduleCreateBtn" data-permission="schedule.create">Create</button>
         </div>
       </div>
@@ -326,6 +335,9 @@ export const TRACKER_SHELL_HTML = `
             </button>
           </div>
           <div class="schedule-modal-body">
+            <p class="schedule-task-deadline-hint" id="scheduleEventTaskHint" hidden role="status">
+              Scheduled on this task's <strong>due date (deadline)</strong>. Time uses your last saved slot — edit if needed.
+            </p>
             <label class="schedule-field">
               <span>Title</span>
               <input id="scheduleEventTitle" type="text" placeholder="Add title" autocomplete="off">
@@ -460,6 +472,46 @@ export const TRACKER_SHELL_HTML = `
       <div class="permission-matrix-wrap" id="permissionMatrixWrap"></div>
     </section>
   </main>
+
+      <div class="schedule-modal-backdrop" id="taskDetailModalBackdrop" hidden>
+        <div class="schedule-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="taskDetailModalTitle">
+          <div class="schedule-modal-header">
+            <h3 id="taskDetailModalTitle">Task details</h3>
+            <button type="button" class="schedule-modal-close" id="taskDetailModalClose" aria-label="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="schedule-modal-body task-detail-modal-body" id="taskDetailModalBody"></div>
+          <div class="schedule-modal-actions">
+            <div class="schedule-modal-actions-right" id="taskDetailModalActions"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="schedule-modal-backdrop" id="moveStatusPromptBackdrop" hidden>
+        <div class="schedule-modal move-status-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="moveStatusPromptTitle">
+          <div class="schedule-modal-header">
+            <h3 id="moveStatusPromptTitle">Move to In Progress</h3>
+            <button type="button" class="schedule-modal-close" id="moveStatusPromptClose" aria-label="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="schedule-modal-body">
+            <p class="move-status-prompt-lead" id="moveStatusPromptLead"></p>
+            <label class="schedule-field">
+              <span>Quick update <span class="optional-label">(optional)</span></span>
+              <textarea id="moveStatusPromptInput" rows="3" placeholder="e.g. Starting design review, blocked on assets…"></textarea>
+            </label>
+          </div>
+          <div class="schedule-modal-actions">
+            <div class="schedule-modal-actions-right">
+              <button type="button" class="btn-secondary" id="moveStatusPromptCancelBtn">Cancel</button>
+              <button type="button" class="btn-secondary" id="moveStatusPromptMoveAnywayBtn">Move without update</button>
+              <button type="button" class="btn-primary" id="moveStatusPromptSaveMoveBtn">Add update &amp; move</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="schedule-modal-backdrop" id="addTaskProjectModalBackdrop" hidden>
         <div class="schedule-modal add-task-project-modal" role="dialog" aria-modal="true" aria-labelledby="addTaskProjectModalTitle">

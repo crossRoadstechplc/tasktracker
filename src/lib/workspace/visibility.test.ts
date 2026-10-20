@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   canSeeAllProjects,
+  canSeeAllTasks,
   ForbiddenError,
   getAccessibleProjectIds,
+  isTaskVisibleToViewer,
   mergeScheduleRecipientIds,
+  taskEventRecipientStaffIds,
 } from "@/src/lib/workspace/visibility";
 
 async function canConnectToDatabase() {
@@ -23,6 +26,36 @@ describe("workspace visibility", () => {
     expect(canSeeAllProjects("Lead")).toBe(false);
     expect(canSeeAllProjects("Senior Staff")).toBe(false);
     expect(canSeeAllProjects("Junior Staff")).toBe(false);
+    expect(canSeeAllTasks("Admin")).toBe(true);
+    expect(canSeeAllTasks("Lead")).toBe(false);
+  });
+
+  it("scopes tasks to owners; leaders only for unassigned", () => {
+    expect(
+      isTaskVisibleToViewer({
+        viewerStaffMemberId: "me",
+        viewerRole: "Junior Staff",
+        ownerStaffMemberIds: ["me"],
+        projectLeaderId: "lead",
+      }),
+    ).toBe(true);
+    expect(
+      isTaskVisibleToViewer({
+        viewerStaffMemberId: "me",
+        viewerRole: "Junior Staff",
+        ownerStaffMemberIds: ["other"],
+        projectLeaderId: "lead",
+      }),
+    ).toBe(false);
+    expect(
+      isTaskVisibleToViewer({
+        viewerStaffMemberId: "lead",
+        viewerRole: "Lead",
+        ownerStaffMemberIds: [],
+        projectLeaderId: "lead",
+      }),
+    ).toBe(true);
+    expect(taskEventRecipientStaffIds([], "lead")).toEqual(["lead"]);
   });
 
   it("exposes ForbiddenError for access denials", () => {
