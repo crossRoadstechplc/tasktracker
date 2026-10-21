@@ -108,7 +108,6 @@ export function LoginForm() {
         <div className="brand">
           <p className="login-eyebrow">Workforce Platform</p>
           <h1>Task Tracker</h1>
-          <p>Sign in with your Workforce email or employee code. Same account as the admin portal and employee app.</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
