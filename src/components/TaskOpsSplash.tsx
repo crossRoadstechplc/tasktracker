@@ -13,7 +13,7 @@ export function TaskOpsSplash({ label = "Opening your workspace…" }: TaskOpsSp
         <p className="task-ops-splash-eyebrow">Task Operations</p>
         <h1 className="task-ops-splash-title">Plan, assign, and track work</h1>
         <p className="task-ops-splash-copy">
-          Boards, schedules, and team updates synced with your workforce admin session.
+          Boards, schedules, and team updates, synced with your workforce admin session.
         </p>
 
         <div className="task-ops-splash-orbit" aria-hidden="true">
