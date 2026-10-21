@@ -27,12 +27,12 @@ export const TRACKER_SHELL_HTML = `
       <nav class="sidebar-nav" aria-label="Workspace tools">
         <div class="sidebar-nav-group">
           <p class="sidebar-nav-group-label">Work</p>
-          <button class="sidebar-nav-item active" id="tasksNavBtn" type="button">
+          <a class="sidebar-nav-item active" id="tasksNavBtn" href="/">
             <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M5 12.5l4 4L19 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg></span>
             <span class="sidebar-label">Tasks</span>
-          </button>
+          </a>
 
           <button class="sidebar-nav-item" id="scheduleNavBtn" type="button">
             <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -43,15 +43,6 @@ export const TRACKER_SHELL_HTML = `
             <span class="sidebar-label">Schedule</span>
           </button>
 
-          <button class="sidebar-nav-item" id="completedTasksBtn" type="button">
-            <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
-              <path d="M8.5 12.3l2.4 2.4 4.6-5.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg></span>
-            <span class="sidebar-label">Completed Tasks</span>
-            <span class="sidebar-count" id="archivedCount">0</span>
-          </button>
-
           <button class="sidebar-nav-item" id="ongoingNavBtn" type="button">
             <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -59,6 +50,32 @@ export const TRACKER_SHELL_HTML = `
             </svg></span>
             <span class="sidebar-label">Ongoing</span>
             <span class="sidebar-count" id="ongoingCount">0</span>
+          </button>
+
+          <a class="sidebar-nav-item" id="completedTasksBtn" href="/completed">
+            <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M8.5 12.3l2.4 2.4 4.6-5.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg></span>
+            <span class="sidebar-label">Completed</span>
+            <span class="sidebar-count" id="completedBoardCount">0</span>
+          </a>
+
+          <a class="sidebar-nav-item" id="archivedNavBtn" href="/archived">
+            <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="7" width="14" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7M5 10h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg></span>
+            <span class="sidebar-label">Archived</span>
+            <span class="sidebar-count" id="archivedNavCount">0</span>
+          </a>
+
+          <button class="sidebar-nav-item" id="trashBtn" type="button">
+            <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 9v8M12 9v8M16 9v8M5 6h14M9 6l1-2h4l1 2M7 6l1 14h8l1-14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg></span>
+            <span class="sidebar-label">Deleted Tasks</span>
+            <span class="sidebar-count" id="trashCount">0</span>
           </button>
         </div>
 
@@ -92,17 +109,6 @@ export const TRACKER_SHELL_HTML = `
             <span class="sidebar-label">Projects</span>
           </button>
         </div>
-
-        <div class="sidebar-nav-group">
-          <p class="sidebar-nav-group-label">System</p>
-          <button class="sidebar-nav-item" id="trashBtn" type="button">
-            <span class="sidebar-icon"><svg class="sidebar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 9v8M12 9v8M16 9v8M5 6h14M9 6l1-2h4l1 2M7 6l1 14h8l1-14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg></span>
-            <span class="sidebar-label">Deleted Tasks</span>
-            <span class="sidebar-count" id="trashCount">0</span>
-          </button>
-        </div>
       </nav>
 
       <div class="sidebar-footer is-collapsed" id="sidebarFooter">
@@ -112,7 +118,7 @@ export const TRACKER_SHELL_HTML = `
           type="button"
           aria-expanded="false"
           aria-controls="sidebarFooterPanel"
-          title="Show account &amp; backup"
+          title="Account"
         >
           <span class="sidebar-footer-toggle-text">
             <span class="sidebar-footer-toggle-kicker">Account</span>
@@ -124,30 +130,14 @@ export const TRACKER_SHELL_HTML = `
         </button>
 
         <div class="sidebar-footer-panel" id="sidebarFooterPanel" hidden>
-          <div class="sidebar-current-user">
-            <span class="sidebar-current-user-label">Signed in as</span>
-            <select id="currentUserSelect" aria-label="Signed in as"></select>
-          </div>
-          <div class="sidebar-data-actions">
-            <button class="sidebar-data-btn" id="exportDataBtn" type="button" data-permission="backup.export">
-              <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3v12"></path>
-                <path d="m8 11 4 4 4-4"></path>
-                <path d="M5 20h14"></path>
-              </svg>
-              <span>Export backup</span>
-            </button>
-            <button class="sidebar-data-btn" id="importDataBtn" type="button" data-permission="backup.import">
-              <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 16V4"></path>
-                <path d="m8 8 4-4 4 4"></path>
-                <path d="M5 20h14"></path>
-              </svg>
-              <span>Import backup</span>
-            </button>
-            <input id="importDataInput" type="file" accept=".json,application/json" hidden>
-          </div>
-          <div class="backup-status" id="backupStatus" role="status" aria-live="polite"></div>
+          <button class="sidebar-data-btn sidebar-logout-btn" id="logoutBtn" type="button">
+            <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 17l5-5-5-5"></path>
+              <path d="M15 12H4"></path>
+              <path d="M20 4v16"></path>
+            </svg>
+            <span>Sign out</span>
+          </button>
           <span class="sidebar-footer-meta">Task Tracker · v1.0</span>
         </div>
       </div>
@@ -164,7 +154,7 @@ export const TRACKER_SHELL_HTML = `
 
       <div class="brand">
         <h1 id="workspaceTitle">Company Task Tracker</h1>
-        <p id="workspaceSubtitle">Combine project, team, and team member filters, then manage tasks by status</p>
+        <p id="workspaceSubtitle">Filter by project, then manage tasks by status</p>
       </div>
     </div>
 
@@ -193,16 +183,6 @@ export const TRACKER_SHELL_HTML = `
       <select id="teamFilter" title="Filter by project">
         <option value="All">All Projects</option>
       </select>
-
-      <select id="orgTeamFilter" title="Filter by team">
-        <option value="All">All Teams</option>
-      </select>
-
-      <select id="staffFilter" title="Filter by team member">
-        <option value="All">All Team Members</option>
-      </select>
-
-      <button class="filter-clear-btn" id="clearFiltersBtn" type="button" hidden>Clear filters</button>
       </div>
       </div>
     </div>
@@ -252,7 +232,7 @@ export const TRACKER_SHELL_HTML = `
       <div class="workspace-section-header">
         <div>
           <h2>Team Members</h2>
-          <p>Synced from Workforce. Set Task Operations permission roles here — assign projects so members can see their tasks.</p>
+          <p>Synced from Workforce. Set Task Operations permission roles here. Assign projects so members can see their tasks.</p>
         </div>
       </div>
 
@@ -336,7 +316,7 @@ export const TRACKER_SHELL_HTML = `
           </div>
           <div class="schedule-modal-body">
             <p class="schedule-task-deadline-hint" id="scheduleEventTaskHint" hidden role="status">
-              Scheduled on this task's <strong>due date (deadline)</strong>. Time uses your last saved slot — edit if needed.
+              Scheduled on this task's <strong>due date (deadline)</strong>. Time uses your last saved slot. Edit if needed.
             </p>
             <label class="schedule-field">
               <span>Title</span>
@@ -413,22 +393,84 @@ export const TRACKER_SHELL_HTML = `
       </div>
     </section>
 
-    <section class="workspace-view management-page" id="completedTasksView">
-      <div class="workspace-section-header">
-        <div>
-          <h2>Completed Tasks</h2>
-          <p>A permanent log of every task that's been finished and archived off the board.</p>
+    <section class="workspace-view management-page record-tasks-page" id="completedTasksView">
+      <header class="record-page-header">
+        <div class="workspace-section-header">
+          <div>
+            <h2>Completed</h2>
+            <p>Table of Done tasks. Use the project filter, then click a row or Details for the full timeline dialog.</p>
+          </div>
+          <label class="record-view-filter">
+            <span>Filter by project</span>
+            <select id="completedProjectFilter" aria-label="Filter completed tasks by project">
+              <option value="All">All projects</option>
+            </select>
+          </label>
         </div>
-      </div>
+      </header>
 
-      <div class="trash-list management-list" id="completedTasksList"></div>
+      <div class="record-table-wrap record-table-wrap--full">
+        <table class="record-task-table">
+          <thead>
+            <tr>
+              <th scope="col">Task</th>
+              <th scope="col">Project</th>
+              <th scope="col">Owners</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Due</th>
+              <th scope="col">Updates</th>
+              <th scope="col">Description</th>
+              <th scope="col">Status</th>
+              <th scope="col" class="record-table-actions-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="completedTasksTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="workspace-view management-page record-tasks-page" id="archivedView">
+      <header class="record-page-header">
+        <div class="workspace-section-header">
+          <div>
+            <h2>Archived</h2>
+            <p>Closed work in table form. Filter by project; open Details for description and activity timeline.</p>
+          </div>
+          <label class="record-view-filter">
+            <span>Filter by project</span>
+            <select id="archivedProjectFilter" aria-label="Filter archived tasks by project">
+              <option value="All">All projects</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <div class="record-table-wrap record-table-wrap--full">
+        <table class="record-task-table">
+          <thead>
+            <tr>
+              <th scope="col">Task</th>
+              <th scope="col">Project</th>
+              <th scope="col">Owners</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Due</th>
+              <th scope="col">Updates</th>
+              <th scope="col">Description</th>
+              <th scope="col">Status</th>
+              <th scope="col">Archived</th>
+              <th scope="col" class="record-table-actions-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="archivedTasksTableBody"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="workspace-view management-page" id="ongoingView">
       <div class="workspace-section-header">
         <div>
           <h2>Ongoing Activity</h2>
-          <p>Projects first — expand a project to see each employee’s open work, progress, and task detail.</p>
+          <p>Projects first. Expand a project to see each employee’s open work, progress, and task detail.</p>
         </div>
       </div>
 
@@ -446,7 +488,7 @@ export const TRACKER_SHELL_HTML = `
       <div class="workspace-section-header">
         <div>
           <h2>Deleted Tasks</h2>
-          <p>Deleted tasks are retained for accountability and can be restored to their previous status.</p>
+          <p>Deleted tasks are kept with the reason and full details. You can restore them to their previous status.</p>
         </div>
       </div>
 
@@ -456,9 +498,31 @@ export const TRACKER_SHELL_HTML = `
     <section class="workspace-view management-page" id="settingsView">
       <div class="workspace-section-header">
         <div>
-          <h2>Permissions &amp; Access</h2>
-          <p>Control what each role can do. Super Admin always has full access and cannot be edited.</p>
+          <h2>Settings</h2>
+          <p>Workspace backup and role permissions. Open this page from the logo when you can edit settings.</p>
         </div>
+      </div>
+
+      <div class="settings-backup-panel" id="settingsBackupSection">
+        <div class="settings-backup-panel-head">
+          <h3>Backup &amp; restore</h3>
+          <p>Export a JSON snapshot of this workspace or import a backup file to restore data.</p>
+        </div>
+        <div class="settings-backup-actions">
+          <button type="button" class="btn-secondary" id="exportDataBtn" data-permission="backup.export">
+            Export backup
+          </button>
+          <button type="button" class="btn-secondary" id="importDataBtn" data-permission="backup.import">
+            Import backup
+          </button>
+          <input id="importDataInput" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="backup-status" id="backupStatus" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="settings-permissions-header">
+        <h3>Permissions &amp; access</h3>
+        <p>Control what each role can do. Super Admin always has full access and cannot be edited.</p>
       </div>
 
       <div class="permission-matrix-actions">
@@ -472,6 +536,30 @@ export const TRACKER_SHELL_HTML = `
       <div class="permission-matrix-wrap" id="permissionMatrixWrap"></div>
     </section>
   </main>
+
+      <div class="schedule-modal-backdrop" id="deleteReasonModalBackdrop" hidden>
+        <div class="schedule-modal delete-reason-modal" role="dialog" aria-modal="true" aria-labelledby="deleteReasonModalTitle">
+          <div class="schedule-modal-header">
+            <h3 id="deleteReasonModalTitle">Delete task</h3>
+            <button type="button" class="schedule-modal-close" id="deleteReasonModalClose" aria-label="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="schedule-modal-body">
+            <p class="delete-reason-lead" id="deleteReasonModalLead"></p>
+            <label class="schedule-field">
+              <span>Why are you deleting this task?</span>
+              <textarea id="deleteReasonInput" rows="3" placeholder="Required. e.g. duplicate, cancelled, created by mistake…"></textarea>
+            </label>
+          </div>
+          <div class="schedule-modal-actions">
+            <div class="schedule-modal-actions-right">
+              <button type="button" class="btn-secondary" id="deleteReasonCancelBtn">Cancel</button>
+              <button type="button" class="btn-primary" id="deleteReasonConfirmBtn">Delete task</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="schedule-modal-backdrop" id="taskDetailModalBackdrop" hidden>
         <div class="schedule-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="taskDetailModalTitle">

@@ -100,7 +100,7 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
     const projectId = ctx.getProjectIds()[projectName];
     if (!projectId) {
       logProjectConfigSync("assert-failed", { projectName, reason: "missing-project-id" });
-      throw new Error("Could not save — project id missing. Refresh and try again.");
+      throw new Error("Could not save. Project id missing. Refresh and try again.");
     }
 
     const memberNames = ctx.getTeamMembers()[projectName] ?? [];
@@ -113,7 +113,7 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
       });
       const label = unresolvedMembers.join(", ");
       throw new Error(
-        `Could not save — ${label} ${unresolvedMembers.length === 1 ? "is" : "are"} not fully invited yet.`,
+        `Could not save. ${label} ${unresolvedMembers.length === 1 ? "is" : "are"} not fully invited yet.`,
       );
     }
 
@@ -125,7 +125,7 @@ export function createSettingsSync(ctx: SettingsSyncContext) {
         leaderName,
       });
       throw new Error(
-        `Could not save — project leader "${leaderName}" is not fully invited yet.`,
+        `Could not save. Project leader "${leaderName}" is not fully invited yet.`,
       );
     }
 

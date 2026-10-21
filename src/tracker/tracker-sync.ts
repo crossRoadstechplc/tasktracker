@@ -13,6 +13,8 @@ export type TrackerSyncContext = {
   applyWorkspaceData: (data: unknown) => void;
   render: () => void;
   renderTrash: () => void;
+  renderCompletedTasks?: () => void;
+  renderArchivedTasks?: () => void;
   renderScheduleView: (options?: { preserveScroll?: boolean }) => void;
   setBackupStatus: (message: string, isError?: boolean) => void;
   onNotificationCreated?: (notification: Record<string, unknown>) => void;
@@ -358,11 +360,14 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
     }
   }
 
-  async function syncTaskDelete(taskId: string) {
+  async function syncTaskDelete(taskId: string, deleteReason?: string) {
     beginRemoteSuppress();
 
     try {
-      const response = await apiFetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+        body: JSON.stringify({ deleteReason: (deleteReason || "").trim() }),
+      });
       if (!response.ok && response.status !== 404) {
         throw new Error(`Delete task failed (${response.status})`);
       }
@@ -837,6 +842,7 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
         if (data?.task && typeof data.task === "object") {
           applyTaskFromServer(data.task as TaskLike);
           ctx.render();
+          if (typeof ctx.renderCompletedTasks === "function") ctx.renderCompletedTasks();
         }
         scheduleNotificationRefresh();
         break;
@@ -873,6 +879,7 @@ export function createTrackerSync(ctx: TrackerSyncContext) {
             ctx.setArchivedTasks([...archived]);
           }
           ctx.render();
+          if (typeof ctx.renderArchivedTasks === "function") ctx.renderArchivedTasks();
         }
         break;
       case "schedule.created":

@@ -325,11 +325,17 @@ export async function addTaskUpdate(input: {
 export async function deleteTask(input: {
   actor: ActorContext;
   taskId: string;
+  deleteReason?: string;
 }): Promise<{ trashId: string; revision: number }> {
   const workspace = await getDefaultWorkspace();
   await assertTaskAccess(workspace.id, input.taskId, viewerFromActor(input.actor));
   const task = await loadTaskLegacy(input.taskId, workspace.id);
   if (!task) throw new Error("Task not found.");
+
+  const deleteReason = (input.deleteReason || "").trim();
+  if (!deleteReason) {
+    throw new Error("A delete reason is required.");
+  }
 
   const trashId = randomUUID();
   const payload = {
@@ -337,6 +343,7 @@ export async function deleteTask(input: {
     trashId,
     previousStatus: task.status,
     deletedAt: new Date().toISOString(),
+    deleteReason,
   };
 
   await prisma.$transaction(async (tx) => {
@@ -375,6 +382,9 @@ export async function archiveTask(input: {
   await assertTaskAccess(workspace.id, input.taskId, viewerFromActor(input.actor));
   const task = await loadTaskLegacy(input.taskId, workspace.id);
   if (!task) throw new Error("Task not found.");
+  if (task.status !== "Done") {
+    throw new Error("Only completed tasks can be archived.");
+  }
 
   const archivedId = randomUUID();
   const payload = {

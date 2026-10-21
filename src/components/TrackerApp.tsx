@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import type { AuthUserResponse } from "@/src/lib/auth/types";
 import type { WorkspaceData } from "@/src/types/workspace";
 import { TRACKER_SHELL_HTML } from "@/src/tracker/tracker-shell";
 import { TrackerSkeleton } from "@/src/components/TrackerSkeleton";
+import type { TrackerWorkspaceView } from "@/src/tracker/tracker-routes";
+import { trackerViewFromPathname } from "@/src/tracker/tracker-routes";
 
 type LoadState =
   | { status: "loading" }
@@ -78,10 +81,16 @@ async function loadBootPayload(): Promise<BootPayload> {
   }
 }
 
-export function TrackerApp() {
+type TrackerAppProps = {
+  initialView?: TrackerWorkspaceView;
+};
+
+export function TrackerApp({ initialView }: TrackerAppProps = {}) {
+  const pathname = usePathname();
   const rootRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
+  const resolvedInitialView = initialView ?? trackerViewFromPathname(pathname ?? "/");
 
   useEffect(() => {
     let cancelled = false;
@@ -124,9 +133,10 @@ export function TrackerApp() {
         preloadData: loadState.data ?? undefined,
         authUser: loadState.authUser,
         workspaceRevision: loadState.workspaceRevision,
+        initialView: resolvedInitialView,
       });
     });
-  }, [loadState]);
+  }, [loadState, resolvedInitialView]);
 
   if (loadState.status === "loading") {
     return <TrackerSkeleton />;

@@ -5,11 +5,21 @@ import type { WorkspaceData } from "@/src/types/workspace";
 import { createTrackerSync } from "@/src/tracker/tracker-sync";
 import { createSettingsSync } from "@/src/tracker/tracker-settings-sync";
 import { createNotificationCenter } from "@/src/tracker/notification-center";
+import {
+  TRACKER_VIEW_PATHS,
+  trackerViewFromPathname,
+  type TrackerWorkspaceView,
+} from "@/src/tracker/tracker-routes";
+
+export type { TrackerWorkspaceView } from "@/src/tracker/tracker-routes";
+export { trackerViewFromPathname } from "@/src/tracker/tracker-routes";
 
 export type TrackerInitOptions = {
   preloadData?: WorkspaceData;
   authUser?: AuthUserResponse;
   workspaceRevision?: number;
+  /** Initial sidebar view; defaults from URL path when omitted. */
+  initialView?: TrackerWorkspaceView;
 };
 
 export function initTrackerApp(options: TrackerInitOptions = {}) {
@@ -189,6 +199,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         { id: "tasks.edit", group: "Tasks", label: "Edit task details (title, priority, due date, owners)" },
         { id: "tasks.move", group: "Tasks", label: "Move tasks between statuses (drag/drop)" },
         { id: "tasks.delete", group: "Tasks", label: "Delete tasks (send to Trash)" },
+        { id: "tasks.archive", group: "Tasks", label: "Archive completed tasks" },
         { id: "tasks.addUpdate", group: "Tasks", label: "Post task updates" },
 
         { id: "trash.restore", group: "Trash", label: "Restore deleted tasks" },
@@ -203,9 +214,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         { id: "teams.delete", group: "Teams", label: "Delete teams" },
         { id: "teams.manageMembers", group: "Teams", label: "Manage team membership" },
 
-        { id: "staff.create", group: "Team Members", label: "Add team members (retired — Workforce sync)" },
-        { id: "staff.edit", group: "Team Members", label: "Edit team member profile (retired — Workforce owned)" },
-        { id: "staff.delete", group: "Team Members", label: "Remove team members (retired — Workforce owned)" },
+        { id: "staff.create", group: "Team Members", label: "Add team members (retired, Workforce sync)" },
+        { id: "staff.edit", group: "Team Members", label: "Edit team member profile (retired, Workforce owned)" },
+        { id: "staff.delete", group: "Team Members", label: "Remove team members (retired, Workforce owned)" },
         { id: "staff.assignRole", group: "Team Members", label: "Assign Task Operations permission role" },
 
         { id: "schedule.create", group: "Schedule", label: "Create schedule events" },
@@ -226,7 +237,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const DEFAULT_PERMISSION_MATRIX = {
         "Super Admin": Object.fromEntries(PERMISSION_ACTIONS.map(a => [a.id, true])),
         "Admin": {
-          "tasks.create": true, "tasks.edit": true, "tasks.move": true, "tasks.delete": true, "tasks.addUpdate": true,
+          "tasks.create": true, "tasks.edit": true, "tasks.move": true, "tasks.delete": true, "tasks.archive": true, "tasks.addUpdate": true,
           "trash.restore": true,
           "projects.create": true, "projects.rename": true, "projects.delete": true, "projects.manageMembers": true,
           "teams.create": true, "teams.rename": true, "teams.delete": true, "teams.manageMembers": true,
@@ -237,7 +248,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "settings.editPermissions": true
         },
         "Lead": {
-          "tasks.create": true, "tasks.edit": true, "tasks.move": true, "tasks.delete": true, "tasks.addUpdate": true,
+          "tasks.create": true, "tasks.edit": true, "tasks.move": true, "tasks.delete": true, "tasks.archive": true, "tasks.addUpdate": true,
           "trash.restore": true,
           "projects.create": false, "projects.rename": false, "projects.delete": false, "projects.manageMembers": true,
           "teams.create": false, "teams.rename": false, "teams.delete": false, "teams.manageMembers": true,
@@ -248,7 +259,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "settings.editPermissions": false
         },
         "Senior Staff": {
-          "tasks.create": true, "tasks.edit": true, "tasks.move": true, "tasks.delete": false, "tasks.addUpdate": true,
+          "tasks.create": true, "tasks.edit": true, "tasks.move": true, "tasks.delete": false, "tasks.archive": true, "tasks.addUpdate": true,
           "trash.restore": false,
           "projects.create": false, "projects.rename": false, "projects.delete": false, "projects.manageMembers": false,
           "teams.create": false, "teams.rename": false, "teams.delete": false, "teams.manageMembers": false,
@@ -259,7 +270,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           "settings.editPermissions": false
         },
         "Junior Staff": {
-          "tasks.create": false, "tasks.edit": false, "tasks.move": true, "tasks.delete": false, "tasks.addUpdate": true,
+          "tasks.create": false, "tasks.edit": false, "tasks.move": true, "tasks.delete": false, "tasks.archive": true, "tasks.addUpdate": true,
           "trash.restore": false,
           "projects.create": false, "projects.rename": false, "projects.delete": false, "projects.manageMembers": false,
           "teams.create": false, "teams.rename": false, "teams.delete": false, "teams.manageMembers": false,
@@ -435,7 +446,20 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function canAccessSettings() {
-        return can("settings.editPermissions");
+        return (
+          can("settings.editPermissions") ||
+          can("backup.export") ||
+          can("backup.import")
+        );
+      }
+
+      function updateSettingsPageVisibility() {
+        const canBackup = can("backup.export") || can("backup.import");
+        const canEditPerms = can("settings.editPermissions");
+        document.getElementById("settingsBackupSection")?.toggleAttribute("hidden", !canBackup);
+        document.querySelector(".settings-permissions-header")?.toggleAttribute("hidden", !canEditPerms);
+        document.querySelector(".permission-matrix-actions")?.toggleAttribute("hidden", !canEditPerms);
+        permissionMatrixWrap?.toggleAttribute("hidden", !canEditPerms);
       }
 
       function refreshPermissionsUi(options = {}) {
@@ -468,6 +492,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       function can(actionId) {
         const role = getCurrentUserRole();
         if (role === "Super Admin") return true;
+        if (actionId === "tasks.archive") {
+          if (permissionMatrix[role]?.["tasks.archive"]) return true;
+          return Boolean(
+            permissionMatrix[role]?.["tasks.delete"] || permissionMatrix[role]?.["tasks.move"]
+          );
+        }
         return Boolean(permissionMatrix[role]?.[actionId]);
       }
       // =====================================================================
@@ -556,6 +586,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       /** @type {null | { draggedId: string, targetStatus: string, mode: "relative" | "columnEnd", targetId?: string, placeAfter?: boolean, visibleTargetIds?: string[] }} */
       let pendingStatusMove = null;
       let taskDetailModalTaskId = "";
+      let taskDetailPreferArchived = false;
       let currentOrgTeamFilter = "All";
       let currentStaffFilter = "All";
       let currentScheduleProjectFilter = "All";
@@ -566,7 +597,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const sidebarCollapseBtn = document.getElementById("sidebarCollapseBtn");
       const mobileSidebarBtn = document.getElementById("mobileSidebarBtn");
       const sidebarBackdrop = document.getElementById("sidebarBackdrop");
-      const currentUserSelect = document.getElementById("currentUserSelect");
       const exportDataBtn = document.getElementById("exportDataBtn");
       const importDataBtn = document.getElementById("importDataBtn");
       const importDataInput = document.getElementById("importDataInput");
@@ -583,8 +613,24 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const orgTeamFormFeedback = document.getElementById("orgTeamFormFeedback");
       const trashList = document.getElementById("trashList");
       const trashCount = document.getElementById("trashCount");
-      const completedTasksList = document.getElementById("completedTasksList");
-      const archivedCount = document.getElementById("archivedCount");
+      const completedBoardCount = document.getElementById("completedBoardCount");
+      const archivedNavCount = document.getElementById("archivedNavCount");
+      const completedProjectFilter = document.getElementById("completedProjectFilter");
+      const archivedProjectFilter = document.getElementById("archivedProjectFilter");
+      const completedTasksTableBody = document.getElementById("completedTasksTableBody");
+      const archivedTasksTableBody = document.getElementById("archivedTasksTableBody");
+      let completedProjectFilterValue = "All";
+      let archivedProjectFilterValue = "All";
+      const archivedView = document.getElementById("archivedView");
+      const archivedNavBtn = document.getElementById("archivedNavBtn");
+      const deleteReasonModalBackdrop = document.getElementById("deleteReasonModalBackdrop");
+      const deleteReasonModalLead = document.getElementById("deleteReasonModalLead");
+      const deleteReasonInput = document.getElementById("deleteReasonInput");
+      const deleteReasonModalClose = document.getElementById("deleteReasonModalClose");
+      const deleteReasonCancelBtn = document.getElementById("deleteReasonCancelBtn");
+      const deleteReasonConfirmBtn = document.getElementById("deleteReasonConfirmBtn");
+      let pendingDeleteTaskId = "";
+      const archivingTaskIds = new Set();
       const ongoingCount = document.getElementById("ongoingCount");
       const ongoingSummary = document.getElementById("ongoingSummary");
       const ongoingList = document.getElementById("ongoingList");
@@ -654,6 +700,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       const scheduleEventTaskHint = document.getElementById("scheduleEventTaskHint");
       const scheduleFromDueBtn = document.getElementById("scheduleFromDueBtn");
       const tasksNavBtn = document.getElementById("tasksNavBtn");
+      const completedTasksNavBtn = document.getElementById("completedTasksBtn");
       const sidebarBrandMark = document.getElementById("sidebarBrandMark");
       const taskFilters = document.getElementById("taskFilters");
       const workspaceTitle = document.getElementById("workspaceTitle");
@@ -716,6 +763,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function setBackupStatus(message, isError = false) {
+        if (!backupStatus) return;
         backupStatus.textContent = message;
         backupStatus.classList.toggle("visible", Boolean(message));
         backupStatus.classList.toggle("error", isError);
@@ -968,7 +1016,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function saveArchivedTasks() {
         localStorage.setItem(ARCHIVED_STORAGE_KEY, JSON.stringify(archivedTasks));
-        updateArchivedCount();
+        updateArchivedNavCount();
         localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
       }
 
@@ -976,8 +1024,113 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         trashCount.textContent = deletedTasks.length;
       }
 
-      function updateArchivedCount() {
-        archivedCount.textContent = archivedTasks.length;
+      function updateCompletedBoardCount() {
+        if (!completedBoardCount) return;
+        completedBoardCount.textContent = String(
+          tasks.filter(task => task.status === "Done").length
+        );
+      }
+
+      function updateArchivedNavCount() {
+        if (!archivedNavCount) return;
+        archivedNavCount.textContent = String(archivedTasks.length);
+      }
+
+      function updateSidebarTaskCounts() {
+        updateTrashCount();
+        updateCompletedBoardCount();
+        updateArchivedNavCount();
+        updateOngoingCount();
+      }
+
+      function commitArchiveTask(task) {
+        archivedTasks.push({
+          ...task,
+          archivedId: crypto.randomUUID(),
+          archivedAt: new Date().toISOString()
+        });
+
+        tasks = tasks.filter(t => t.id !== task.id);
+        persistTasksLocally();
+        saveArchivedTasks();
+        void trackerSync.syncTaskArchive(task.id);
+        updateSidebarTaskCounts();
+        render();
+        if (archivedView?.classList.contains("active")) renderArchivedTasks();
+        if (completedTasksView.classList.contains("active")) renderCompletedTasks();
+      }
+
+      function archiveTaskFromBoard(task) {
+        if (!task?.id || !can("tasks.archive")) return;
+        if (task.status !== "Done") return;
+        if (archivingTaskIds.has(task.id)) return;
+
+        const card = document.querySelector(`.task[data-id="${task.id}"]`);
+
+        if (card) {
+          archivingTaskIds.add(task.id);
+          card.classList.add("task-archiving");
+          card.draggable = false;
+
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            archivingTaskIds.delete(task.id);
+            commitArchiveTask(task);
+          };
+
+          card.addEventListener(
+            "animationend",
+            event => {
+              if (event.target === card) finish();
+            },
+            { once: true }
+          );
+          setTimeout(finish, 620);
+          return;
+        }
+
+        commitArchiveTask(task);
+      }
+
+      function deleteTaskWithReason(task, deleteReason) {
+        if (!task?.id || !can("tasks.delete")) return;
+        const reason = (deleteReason || "").trim();
+        if (!reason) return;
+
+        deletedTasks.push({
+          ...task,
+          previousStatus: task.status,
+          deletedAt: new Date().toISOString(),
+          deleteReason: reason
+        });
+
+        tasks = tasks.filter(t => t.id !== task.id);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        localStorage.setItem(TRASH_STORAGE_KEY, JSON.stringify(deletedTasks));
+        localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
+        updateSidebarTaskCounts();
+        void trackerSync.syncTaskDelete(task.id, reason);
+        render();
+        if (trashView.classList.contains("active")) renderTrash();
+      }
+
+      function closeDeleteReasonModal() {
+        if (!deleteReasonModalBackdrop) return;
+        deleteReasonModalBackdrop.hidden = true;
+        pendingDeleteTaskId = "";
+        if (deleteReasonInput) deleteReasonInput.value = "";
+      }
+
+      function openDeleteReasonModal(task) {
+        if (!deleteReasonModalBackdrop || !deleteReasonModalLead || !task) return;
+        pendingDeleteTaskId = task.id;
+        deleteReasonModalLead.textContent =
+          `You are deleting "${task.title || "Untitled task"}". This will move it to Deleted Tasks with your reason.`;
+        if (deleteReasonInput) deleteReasonInput.value = "";
+        deleteReasonModalBackdrop.hidden = false;
+        requestAnimationFrame(() => deleteReasonInput?.focus());
       }
 
       function getOpenTasks() {
@@ -1326,6 +1479,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         resetPermissionsBtn.hidden = !can("settings.editPermissions");
         savePermissionsBtn.hidden = !can("settings.editPermissions");
         updatePermissionSaveUi();
+        updateSettingsPageVisibility();
       }
 
       function markPermissionMatrixDirty() {
@@ -1429,12 +1583,23 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
             const meta = document.createElement("div");
             meta.className = "trash-meta";
+            const descriptionSnippet =
+              typeof task.description === "string" && task.description.trim()
+                ? escapeHtml(task.description.trim())
+                : "<em>No description</em>";
+            const reasonSnippet =
+              typeof task.deleteReason === "string" && task.deleteReason.trim()
+                ? escapeHtml(task.deleteReason.trim())
+                : "<em>No reason recorded</em>";
+
             meta.innerHTML = `
               Project: <strong>${escapeHtml(task.team || "Unassigned")}</strong><br>
               Previous status: <strong>${escapeHtml(task.previousStatus || task.status || "Unknown")}</strong><br>
               Owners: <strong>${escapeHtml(ownerDisplayLabel(task) || "Unassigned")}</strong><br>
               Priority: <strong>${escapeHtml(task.priority || "Low")}</strong><br>
               ${task.due ? `Due: <strong>${escapeHtml(task.due)}</strong><br>` : ""}
+              Reason: <strong>${reasonSnippet}</strong><br>
+              Description: ${descriptionSnippet}<br>
               Deleted: <strong>${escapeHtml(formatDeletedAt(task.deletedAt))}</strong>
             `;
 
@@ -1493,39 +1658,204 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         applyPermissionGating();
       }
 
-      function renderCompletedTasks() {
-        completedTasksList.innerHTML = "";
+      function uniqueProjectsFromTaskList(taskList) {
+        return [...new Set(taskList.map(task => task.team).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b)
+        );
+      }
 
-        if (!archivedTasks.length) {
-          const empty = document.createElement("div");
-          empty.className = "empty";
-          empty.textContent = "No completed tasks archived yet.";
-          completedTasksList.appendChild(empty);
+      function filterTasksByProject(taskList, projectFilter) {
+        if (!projectFilter || projectFilter === "All") return taskList;
+        return taskList.filter(task => (task.team || "") === projectFilter);
+      }
+
+      function populateRecordProjectFilter(select, taskList, currentValue) {
+        if (!select) return currentValue;
+        const projects = uniqueProjectsFromTaskList(taskList);
+        const previous = currentValue || "All";
+        select.innerHTML = '<option value="All">All projects</option>';
+        projects.forEach(project => {
+          const option = document.createElement("option");
+          option.value = project;
+          option.textContent = project;
+          select.appendChild(option);
+        });
+        const next = previous === "All" || projects.includes(previous) ? previous : "All";
+        select.value = next;
+        return next;
+      }
+
+      function recordTaskDescriptionCell(task) {
+        const text = typeof task.description === "string" ? task.description.trim() : "";
+        if (!text) return '<span class="record-cell-muted">None</span>';
+        const short = text.length > 48 ? `${text.slice(0, 45).trim()}…` : text;
+        return escapeHtml(short);
+      }
+
+      function renderRecordTableEmptyRow(tbody, colSpan, message) {
+        if (!tbody) return;
+        const row = document.createElement("tr");
+        row.className = "record-table-empty-row";
+        row.innerHTML = `<td colspan="${colSpan}" class="record-table-empty-cell">${escapeHtml(message)}</td>`;
+        tbody.appendChild(row);
+      }
+
+      function attachRecordTaskRow(row, task, options = {}) {
+        const openDetails = () =>
+          openTaskDetailModal(task.id, { preferArchived: options.preferArchived === true });
+
+        row.querySelector(".record-task-link")?.addEventListener("click", event => {
+          event.stopPropagation();
+          openDetails();
+        });
+        row.querySelector(".record-details-btn")?.addEventListener("click", event => {
+          event.stopPropagation();
+          openDetails();
+        });
+        row.querySelector(".record-archive-btn")?.addEventListener("click", event => {
+          event.stopPropagation();
+          if (typeof options.onArchive === "function") options.onArchive(task);
+        });
+
+        row.addEventListener("click", event => {
+          if (event.target.closest("button")) return;
+          openDetails();
+        });
+        row.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openDetails();
+          }
+        });
+      }
+
+      function renderCompletedTasks() {
+        if (!completedTasksTableBody) return;
+
+        const allCompleted = tasks.filter(task => task.status === "Done");
+        completedProjectFilterValue = populateRecordProjectFilter(
+          completedProjectFilter,
+          allCompleted,
+          completedProjectFilterValue
+        );
+
+        const filtered = filterTasksByProject(allCompleted, completedProjectFilterValue);
+
+        completedTasksTableBody.innerHTML = "";
+        const completedColSpan = 9;
+
+        if (!allCompleted.length) {
+          renderRecordTableEmptyRow(
+            completedTasksTableBody,
+            completedColSpan,
+            "No completed tasks yet. Move work to Completed on the board."
+          );
           return;
         }
 
-        [...archivedTasks]
-          .sort((a, b) => new Date(b.archivedAt || 0) - new Date(a.archivedAt || 0))
+        if (!filtered.length) {
+          renderRecordTableEmptyRow(
+            completedTasksTableBody,
+            completedColSpan,
+            "No completed tasks match this project filter."
+          );
+          return;
+        }
+
+        filtered
+          .slice()
+          .sort((a, b) => (a.title || "").localeCompare(b.title || ""))
           .forEach(task => {
-            const item = document.createElement("article");
-            item.className = "trash-item";
+            const row = document.createElement("tr");
+            row.className = "record-task-row";
+            row.tabIndex = 0;
+            row.dataset.taskId = task.id;
 
-            const title = document.createElement("h3");
-            title.textContent = task.title || "Untitled task";
-
-            const meta = document.createElement("div");
-            meta.className = "trash-meta";
-            meta.innerHTML = `
-              Project: <strong>${escapeHtml(task.team || "Unassigned")}</strong><br>
-              Owners: <strong>${escapeHtml(ownerDisplayLabel(task) || "Unassigned")}</strong><br>
-              Priority: <strong>${escapeHtml(task.priority || "Low")}</strong><br>
-              ${task.due ? `Due: <strong>${escapeHtml(task.due)}</strong><br>` : ""}
-              Completed: <strong>${escapeHtml(formatDeletedAt(task.archivedAt))}</strong>
+            const updateCount = ensureTaskUpdates(task).length;
+            row.innerHTML = `
+              <td class="record-task-title-cell">
+                <button type="button" class="record-task-link">${escapeHtml(task.title || "Untitled task")}</button>
+              </td>
+              <td>${escapeHtml(task.team || "Unassigned")}</td>
+              <td>${escapeHtml(ownerDisplayLabel(task) || "Unassigned")}</td>
+              <td><span class="tag ${priorityClass(task.priority)}">${escapeHtml(task.priority || "Low")}</span></td>
+              <td>${escapeHtml(formatDue(task.due))}</td>
+              <td class="record-cell-numeric">${updateCount}</td>
+              <td class="record-task-desc-cell">${recordTaskDescriptionCell(task)}</td>
+              <td><span class="record-status-pill record-status-pill--done">Completed</span></td>
+              <td class="record-table-actions">
+                <button type="button" class="btn-secondary btn-compact record-details-btn">Details</button>
+                <button type="button" class="btn-primary btn-compact record-archive-btn" data-permission="tasks.archive">Archive</button>
+              </td>
             `;
 
-            item.appendChild(title);
-            item.appendChild(meta);
-            completedTasksList.appendChild(item);
+            attachRecordTaskRow(row, task, { onArchive: archiveTaskFromBoard });
+            completedTasksTableBody.appendChild(row);
+          });
+
+        applyPermissionGating(completedTasksTableBody);
+      }
+
+      function renderArchivedTasks() {
+        if (!archivedTasksTableBody) return;
+
+        archivedProjectFilterValue = populateRecordProjectFilter(
+          archivedProjectFilter,
+          archivedTasks,
+          archivedProjectFilterValue
+        );
+
+        const filtered = filterTasksByProject(archivedTasks, archivedProjectFilterValue);
+
+        archivedTasksTableBody.innerHTML = "";
+        const archivedColSpan = 10;
+
+        if (!archivedTasks.length) {
+          renderRecordTableEmptyRow(
+            archivedTasksTableBody,
+            archivedColSpan,
+            "No archived tasks yet. Archive items from Completed when work is fully closed."
+          );
+          return;
+        }
+
+        if (!filtered.length) {
+          renderRecordTableEmptyRow(
+            archivedTasksTableBody,
+            archivedColSpan,
+            "No archived tasks match this project filter."
+          );
+          return;
+        }
+
+        [...filtered]
+          .sort((a, b) => new Date(b.archivedAt || 0) - new Date(a.archivedAt || 0))
+          .forEach(task => {
+            const row = document.createElement("tr");
+            row.className = "record-task-row";
+            row.tabIndex = 0;
+            row.dataset.taskId = task.id;
+
+            const updateCount = ensureTaskUpdates(task).length;
+            row.innerHTML = `
+              <td class="record-task-title-cell">
+                <button type="button" class="record-task-link">${escapeHtml(task.title || "Untitled task")}</button>
+              </td>
+              <td>${escapeHtml(task.team || "Unassigned")}</td>
+              <td>${escapeHtml(ownerDisplayLabel(task) || "Unassigned")}</td>
+              <td><span class="tag ${priorityClass(task.priority)}">${escapeHtml(task.priority || "Low")}</span></td>
+              <td>${escapeHtml(formatDue(task.due))}</td>
+              <td class="record-cell-numeric">${updateCount}</td>
+              <td class="record-task-desc-cell">${recordTaskDescriptionCell(task)}</td>
+              <td><span class="record-status-pill record-status-pill--archived">Archived</span></td>
+              <td>${escapeHtml(formatDeletedAt(task.archivedAt))}</td>
+              <td class="record-table-actions">
+                <button type="button" class="btn-secondary btn-compact record-details-btn">Details</button>
+              </td>
+            `;
+
+            attachRecordTaskRow(row, task, { preferArchived: true });
+            archivedTasksTableBody.appendChild(row);
           });
       }
 
@@ -1624,7 +1954,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           function cell(text, className) {
             const el = document.createElement("div");
             el.className = `staff-cell ${className || ""}`.trim();
-            el.textContent = text || "—";
+            el.textContent = text || "None";
             if (text) el.title = text;
             return el;
           }
@@ -1691,7 +2021,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               }
               const staffId = staffIds[name];
               if (!staffId) {
-                window.alert("Could not save — team member id missing. Refresh and try again.");
+                window.alert("Could not save. Team member id missing. Refresh and try again.");
                 select.value = currentRole;
                 return;
               }
@@ -1732,7 +2062,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (!staff.length) {
           const empty = document.createElement("div");
           empty.className = "empty";
-          empty.textContent = "No Workforce people synced yet. Add employees in the admin portal — they appear here automatically.";
+          empty.textContent = "No Workforce people synced yet. Add employees in the admin portal and they appear here automatically.";
           staffManagerList.appendChild(empty);
         }
 
@@ -2314,7 +2644,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         const lines = [
           `Deadline: ${task.due ? formatDue(task.due) : "No due date"}`,
           `Status: ${displayStatusLabel(task.status || "To Do")}`,
-          `Project: ${task.team || "—"}`,
+          `Project: ${task.team || "None"}`,
           ""
         ];
 
@@ -2545,7 +2875,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         }
         if (scheduleGuestHelper) {
           scheduleGuestHelper.textContent = project
-            ? "Pick anyone from the team. Guests are invited to this event only — they are not added to the project. All project members are also notified."
+            ? "Pick anyone from the team. Guests are invited to this event only. They are not added to the project. All project members are also notified."
             : "Only invited guests can see this event.";
         }
       }
@@ -3290,7 +3620,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               }
 
               populateOrgTeamFilter();
-              orgTeamFilter.value = currentOrgTeamFilter;
+              if (orgTeamFilter) orgTeamFilter.value = currentOrgTeamFilter;
               renderOrgTeamManager();
               populateStaffFilter();
               populateCurrentUserSelect();
@@ -3356,7 +3686,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             populateOrgTeamFilter();
-            orgTeamFilter.value = currentOrgTeamFilter;
+            if (orgTeamFilter) orgTeamFilter.value = currentOrgTeamFilter;
             renderOrgTeamManager();
             populateStaffFilter();
             populateCurrentUserSelect();
@@ -4236,6 +4566,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function populateOrgTeamFilter() {
+        if (!orgTeamFilter) {
+          currentOrgTeamFilter = "All";
+          return;
+        }
+
         const existing = currentOrgTeamFilter;
 
         orgTeamFilter.innerHTML = '<option value="All">All Teams</option>';
@@ -4252,6 +4587,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function populateStaffFilter() {
+        if (!staffFilter) {
+          currentStaffFilter = "All";
+          return;
+        }
+
         const existing = currentStaffFilter;
 
         staffFilter.innerHTML = '<option value="All">All Team Members</option>';
@@ -4273,10 +4613,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       function renderAuthenticatedUser() {
         const name = getCurrentUser()?.name || currentUserName || "Unknown";
-        const display = document.getElementById("currentUserDisplay");
-        if (display) {
-          display.textContent = name;
-        }
         const toggleName = document.getElementById("sidebarFooterToggleName");
         if (toggleName) {
           toggleName.textContent = name;
@@ -4284,30 +4620,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function setupAuthenticatedUserUi() {
-        const userBlock = document.querySelector(".sidebar-current-user");
-        if (!userBlock || !currentUserSelect) return;
-
-        const display = document.createElement("strong");
-        display.id = "currentUserDisplay";
-        display.className = "sidebar-current-user-name";
-        currentUserSelect.replaceWith(display);
-
-        if (document.getElementById("logoutBtn")) return;
-
-        const logoutBtn = document.createElement("button");
-        logoutBtn.type = "button";
-        logoutBtn.id = "logoutBtn";
-        logoutBtn.className = "sidebar-data-btn sidebar-logout-btn";
-        logoutBtn.innerHTML = `
-          <svg class="sidebar-data-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M10 17l5-5-5-5"></path>
-            <path d="M15 12H4"></path>
-            <path d="M20 4v16"></path>
-          </svg>
-          <span>Sign out</span>
-        `;
-        userBlock.appendChild(logoutBtn);
-
+        const logoutBtn = document.getElementById("logoutBtn");
+        if (!logoutBtn || logoutBtn.dataset.bound === "1") {
+          renderAuthenticatedUser();
+          return;
+        }
+        logoutBtn.dataset.bound = "1";
         logoutBtn.addEventListener("click", async () => {
           try {
             await fetch("/api/auth/logout", { method: "POST" });
@@ -4315,7 +4633,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             window.location.href = "/login";
           }
         });
-
         renderAuthenticatedUser();
       }
 
@@ -4326,36 +4643,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       }
 
       function filteredTasks() {
-        return tasks.filter(task => {
-          const matchesProject =
-            currentFilter === "All" || task.team === currentFilter;
-
-          const noOwnerFilters =
-            currentOrgTeamFilter === "All" && currentStaffFilter === "All";
-
-          const matchesOwnerFilters =
-            noOwnerFilters ||
-            taskOwners(task).some(ownerName => {
-              const matchesOrgTeam =
-                currentOrgTeamFilter === "All" ||
-                orgTeamsForStaff(ownerName).includes(currentOrgTeamFilter);
-
-              const matchesStaff =
-                currentStaffFilter === "All" ||
-                ownerName === currentStaffFilter;
-
-              return matchesOrgTeam && matchesStaff;
-            });
-
-          return matchesProject && matchesOwnerFilters;
-        });
+        return tasks.filter(task =>
+          currentFilter === "All" || task.team === currentFilter
+        );
       }
 
       function updateFilterControls() {
-        clearFiltersBtn.hidden =
-          currentFilter === "All" &&
-          currentOrgTeamFilter === "All" &&
-          currentStaffFilter === "All";
         updateProjectContextBar();
         updateTasksWorkspaceSubtitle();
       }
@@ -4364,11 +4657,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (!workspaceSubtitle || !tasksView.classList.contains("active")) return;
         if (currentFilter === "All") {
           workspaceSubtitle.textContent =
-            "Combine project, team, and team member filters, then manage tasks by status";
+            "Filter by project, then manage tasks by status";
           return;
         }
         workspaceSubtitle.textContent =
-          `Focused on ${currentFilter} — open a card for details or add updates when work starts`;
+          `Focused on ${currentFilter}. Open a card for details or add updates when work starts.`;
       }
 
       function updateProjectContextBar() {
@@ -4423,6 +4716,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (draggedIndex < 0) return;
 
         const [draggedTask] = tasks.splice(draggedIndex, 1);
+        recordTaskStatusChange(draggedTask, targetStatus);
         draggedTask.status = targetStatus;
 
         const targetIndex = tasks.findIndex(task => task.id === targetId);
@@ -4441,6 +4735,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (draggedIndex < 0) return;
 
         const [draggedTask] = tasks.splice(draggedIndex, 1);
+        recordTaskStatusChange(draggedTask, targetStatus);
         draggedTask.status = targetStatus;
 
         const targetIds = visibleTargetIds.filter(id => id !== draggedId);
@@ -4481,11 +4776,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         render();
 
         if (!wasCompleted && targetStatus === "Done") celebrateTaskCompletion(draggedId);
+        updateSidebarTaskCounts();
+        if (completedTasksView.classList.contains("active")) renderCompletedTasks();
       }
 
       function requestTaskStatusMove(move) {
         const task = tasks.find(t => t.id === move?.draggedId);
         if (!task) return;
+
+        if (task.status === "Done" && move.targetStatus !== "Done") {
+          clearTaskDropIndicators();
+          document.querySelector(".task.dragging")?.classList.remove("dragging");
+          return;
+        }
 
         const startingWork =
           task.status === "To Do" &&
@@ -4553,29 +4856,43 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (!taskDetailModalBackdrop) return;
         taskDetailModalBackdrop.hidden = true;
         taskDetailModalTaskId = "";
+        taskDetailPreferArchived = false;
+        taskDetailModalBackdrop.querySelector(".task-detail-modal")?.classList.remove("task-detail-modal--timeline");
       }
 
       function renderTaskDetailModal(taskId) {
         if (!taskDetailModalBody || !taskDetailModalTitle || !taskDetailModalActions) return;
 
-        const task = tasks.find(t => t.id === taskId);
-        if (!task) {
+        const record = findTaskRecord(taskId, { preferArchived: taskDetailPreferArchived });
+        if (!record) {
           closeTaskDetailModal();
           return;
         }
 
+        const { task, isArchivedRecord } = record;
+        const readOnlyRecord = isArchivedRecord;
+        const modalDialog = taskDetailModalBackdrop?.querySelector(".task-detail-modal");
+
         taskDetailModalTaskId = taskId;
         taskDetailModalTitle.textContent = task.title || "Task details";
+        modalDialog?.classList.toggle("task-detail-modal--timeline", true);
 
         const descriptionBlock = typeof task.description === "string" && task.description.trim()
           ? `<div class="task-detail-description">${escapeHtml(task.description.trim())}</div>`
-          : `<p class="task-detail-description" style="color:#777;font-style:italic;">No description</p>`;
+          : `<p class="task-detail-description task-detail-description-empty">No description</p>`;
+
+        const archivedBanner = isArchivedRecord
+          ? `<p class="task-detail-record-banner">This task is archived and read-only. It cannot be edited or moved.</p>`
+          : task.status === "Done"
+            ? `<p class="task-detail-record-banner task-detail-record-banner--done">Completed on the board. Archive when you want to close it permanently.</p>`
+            : "";
 
         taskDetailModalBody.innerHTML = `
+          ${archivedBanner}
           <div class="task-detail-meta-grid">
             <div class="task-detail-meta-item">
               <span>Status</span>
-              <span>${escapeHtml(displayStatusLabel(task.status))}</span>
+              <span>${escapeHtml(isArchivedRecord ? "Archived" : displayStatusLabel(task.status))}</span>
             </div>
             <div class="task-detail-meta-item">
               <span>Project</span>
@@ -4593,6 +4910,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               <span>Owners</span>
               <span>${escapeHtml(ownerDisplayLabel(task) || "Unassigned")}</span>
             </div>
+            ${isArchivedRecord && task.archivedAt
+            ? `<div class="task-detail-meta-item">
+              <span>Archived</span>
+              <span>${escapeHtml(formatDeletedAt(task.archivedAt))}</span>
+            </div>`
+            : ""}
           </div>
 
           <div>
@@ -4600,29 +4923,37 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             ${descriptionBlock}
           </div>
 
-          <div>
-            <h4 class="task-detail-updates-title">Updates</h4>
-            ${updatesHtml(task)}
+          <div class="task-detail-timeline-section">
+            <h4 class="task-detail-updates-title">Activity timeline</h4>
+            <p class="task-detail-timeline-lead">From To Do through each update${isArchivedRecord ? " and archive" : ""}.</p>
+            ${lifecycleTimelineHtml(task, { archivedAt: isArchivedRecord ? task.archivedAt : undefined })}
           </div>
 
-          <div class="task-detail-add-update" data-permission="tasks.addUpdate">
+          ${readOnlyRecord
+            ? ""
+            : `<div class="task-detail-add-update" data-permission="tasks.addUpdate">
             <label for="taskDetailUpdateInput">Add update</label>
             <textarea id="taskDetailUpdateInput" placeholder="Share progress, blockers, or next steps…"></textarea>
             <div class="task-detail-add-update-actions">
               <button type="button" class="btn-primary" id="taskDetailUpdateSaveBtn" data-permission="tasks.addUpdate">Post update</button>
             </div>
-          </div>
+          </div>`}
         `;
 
         applyPermissionGating(taskDetailModalBody);
 
         taskDetailModalActions.innerHTML = `
           <button type="button" class="btn-secondary" id="taskDetailCloseBtn">Close</button>
-          ${can("schedule.create") && task.status !== "Done"
+          ${!readOnlyRecord && can("schedule.create")
             ? `<button type="button" class="btn-secondary" id="taskDetailScheduleBtn" data-permission="schedule.create">Schedule on deadline</button>`
             : ""}
-          ${can("tasks.edit") && task.status !== "Done" ? '<button type="button" class="btn-secondary" id="taskDetailEditBtn">Edit on board</button>' : ""}
-          ${can("tasks.delete") ? `<button type="button" class="btn-secondary" id="taskDetailDeleteBtn">${task.status === "Done" ? "Archive" : "Delete"}</button>` : ""}
+          ${!readOnlyRecord && can("tasks.edit") ? '<button type="button" class="btn-secondary" id="taskDetailEditBtn">Edit on board</button>' : ""}
+          ${!isArchivedRecord && can("tasks.archive") && task.status === "Done"
+            ? `<button type="button" class="btn-secondary" id="taskDetailArchiveBtn">Archive</button>`
+            : ""}
+          ${!readOnlyRecord && can("tasks.delete") && task.status !== "Done"
+            ? `<button type="button" class="btn-secondary" id="taskDetailDeleteBtn">Delete</button>`
+            : ""}
         `;
 
         applyPermissionGating(taskDetailModalActions);
@@ -4635,11 +4966,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         if (scheduleBtn && !taskDeadlineDate(task)) {
           scheduleBtn.disabled = true;
           scheduleBtn.title =
-            "Add a due date on this task first — the event is placed on that deadline day.";
+            "Add a due date on this task first. The event is placed on that deadline day.";
         } else if (scheduleBtn) {
           scheduleBtn.title = "Create a calendar event on this task's due date (deadline)";
         }
         const editBtn = taskDetailModalActions.querySelector("#taskDetailEditBtn");
+        const archiveBtn = taskDetailModalActions.querySelector("#taskDetailArchiveBtn");
         const deleteBtn = taskDetailModalActions.querySelector("#taskDetailDeleteBtn");
 
         updateSaveBtn?.addEventListener("click", () => {
@@ -4671,15 +5003,20 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           render();
         });
 
+        archiveBtn?.addEventListener("click", () => {
+          closeTaskDetailModal();
+          archiveTaskFromBoard(task);
+        });
+
         deleteBtn?.addEventListener("click", () => {
           closeTaskDetailModal();
-          const card = document.querySelector(`.task[data-id="${taskId}"]`);
-          card?.querySelector(".delete-btn")?.click();
+          openDeleteReasonModal(task);
         });
       }
 
-      function openTaskDetailModal(taskId) {
+      function openTaskDetailModal(taskId, options = {}) {
         if (!taskDetailModalBackdrop) return;
+        taskDetailPreferArchived = options.preferArchived === true;
         renderTaskDetailModal(taskId);
         taskDetailModalBackdrop.hidden = false;
       }
@@ -4757,7 +5094,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         currentFilter = projectName;
         teamFilter.value = projectName;
         currentOrgTeamFilter = "All";
-        orgTeamFilter.value = "All";
         pendingAddTaskStatus = statusToOpen;
         closeAddTaskProjectModal();
         render();
@@ -4832,7 +5168,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       function taskUpdatePreviewMarkup(task) {
         const latest = latestTaskUpdate(task);
         if (!latest?.text) {
-          return `<div class="task-updates-preview is-empty">No updates yet — add one when you start work</div>`;
+          return `<div class="task-updates-preview is-empty">No updates yet. Add one when you start work.</div>`;
         }
 
         const preview = latest.text.length > 120 ? `${latest.text.slice(0, 117)}…` : latest.text;
@@ -4861,6 +5197,122 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       function ensureTaskUpdates(task) {
         if (!Array.isArray(task.updates)) task.updates = [];
         return task.updates;
+      }
+
+      function ensureTaskStatusHistory(task) {
+        if (!Array.isArray(task.statusHistory)) task.statusHistory = [];
+        return task.statusHistory;
+      }
+
+      function recordTaskStatusChange(task, nextStatus) {
+        if (!task || !nextStatus || task.status === nextStatus) return;
+        ensureTaskStatusHistory(task).push({
+          status: nextStatus,
+          at: new Date().toISOString()
+        });
+      }
+
+      function seedTaskStatusHistoryIfEmpty(task) {
+        const history = ensureTaskStatusHistory(task);
+        if (history.length) return;
+        const path = ["To Do", "In Progress", "Done"];
+        const end = Math.max(0, path.indexOf(task.status));
+        for (let i = 0; i <= end; i += 1) {
+          history.push({ status: path[i], at: "" });
+        }
+      }
+
+      function findTaskRecord(taskId, options = {}) {
+        const preferArchived = options.preferArchived === true;
+        if (preferArchived) {
+          const archived = archivedTasks.find(t => t.id === taskId);
+          if (archived) return { task: archived, isArchivedRecord: true };
+        }
+        const active = tasks.find(t => t.id === taskId);
+        if (active) return { task: active, isArchivedRecord: false };
+        const archived = archivedTasks.find(t => t.id === taskId);
+        if (archived) return { task: archived, isArchivedRecord: true };
+        return null;
+      }
+
+      function formatTimelineTimestamp(value) {
+        if (!value) return "Time not recorded";
+        if (isTodayTimestamp(value)) {
+          return `Today · ${hoursAgoLabel(value)}`;
+        }
+        return formatUpdateTimestamp(value) || formatDeletedAt(value);
+      }
+
+      function buildTaskTimelineEvents(task, options = {}) {
+        seedTaskStatusHistoryIfEmpty(task);
+        const events = [];
+
+        ensureTaskStatusHistory(task).forEach(entry => {
+          events.push({
+            kind: "status",
+            at: entry.at || "",
+            title: displayStatusLabel(entry.status),
+            detail: entry.status === "To Do"
+              ? "Task created on the board"
+              : entry.status === "In Progress"
+                ? "Work started"
+                : "Marked complete on the board"
+          });
+        });
+
+        ensureTaskUpdates(task).forEach(update => {
+          events.push({
+            kind: "update",
+            at: update.createdAt || "",
+            title: "Update",
+            detail: update.text || ""
+          });
+        });
+
+        const archivedAt = options.archivedAt || task.archivedAt;
+        if (archivedAt) {
+          events.push({
+            kind: "archived",
+            at: archivedAt,
+            title: "Archived",
+            detail: "Moved to closed records for reference"
+          });
+        }
+
+        events.sort((a, b) => {
+          if (!a.at && !b.at) return 0;
+          if (!a.at) return -1;
+          if (!b.at) return 1;
+          return new Date(a.at).getTime() - new Date(b.at).getTime();
+        });
+
+        return events;
+      }
+
+      function lifecycleTimelineHtml(task, options = {}) {
+        const events = buildTaskTimelineEvents(task, options);
+        if (!events.length) {
+          return '<p class="lifecycle-timeline-empty">No activity recorded yet.</p>';
+        }
+
+        return `
+          <ol class="lifecycle-timeline" aria-label="Task activity timeline">
+            ${events.map(event => `
+              <li class="lifecycle-timeline-item lifecycle-timeline-item--${event.kind}">
+                <span class="lifecycle-timeline-dot" aria-hidden="true"></span>
+                <div class="lifecycle-timeline-content">
+                  <div class="lifecycle-timeline-head">
+                    <span class="lifecycle-timeline-kind">${escapeHtml(event.title)}</span>
+                    <time class="lifecycle-timeline-time">${escapeHtml(formatTimelineTimestamp(event.at))}</time>
+                  </div>
+                  ${event.detail
+                    ? `<p class="lifecycle-timeline-detail">${escapeHtml(event.detail)}</p>`
+                    : ""}
+                </div>
+              </li>
+            `).join("")}
+          </ol>
+        `;
       }
 
       function isTodayTimestamp(value) {
@@ -4997,7 +5449,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   class="column-add-btn"
                   data-permission="tasks.create"
                   data-permission-mode="disable"
-                  title="${currentFilter === "All" ? "Add task — choose a project" : "Add task to " + status}"
+                  title="${currentFilter === "All" ? "Add task: choose a project" : "Add task to " + status}"
                 >+ Add</button>` : ""}
               </div>
               <div class="count">${inColumn.length}</div>
@@ -5021,7 +5473,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                     </div>
 
                     <div>
-                      <label>Owners <span class="optional-label">(optional — leave empty for Unassigned)</span></label>
+                      <label>Owners <span class="optional-label">(optional, leave empty for Unassigned)</span></label>
                       <details class="inline-owner owner-checklist">
                         ${ownerChecklistInnerHtml(currentFilter, [])}
                       </details>
@@ -5157,6 +5609,12 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               if (index >= 0) tasks[index] = data;
               save(editingId);
             } else if (!tasks.some(row => row.id === data.id)) {
+              if (!Array.isArray(data.statusHistory) || !data.statusHistory.length) {
+                data.statusHistory = [{
+                  status: data.status || status,
+                  at: new Date().toISOString()
+                }];
+              }
               tasks.push(data);
               save();
             } else {
@@ -5240,6 +5698,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   </div>
                 </div>
 
+                ${isCompletedTask ? `
+                  <div class="task-completed-archive-bar" data-permission="tasks.archive">
+                    <button type="button" class="task-archive-primary archive-btn" data-permission="tasks.archive">
+                      Archive to closed records
+                    </button>
+                  </div>
+                ` : ""}
+
                 <div class="task-footer">
                   <div class="task-footer-info">
                     <div class="task-owners${(isCompletedTask || !canEditTasks) ? "" : " task-owners-quick-trigger"}"${(isCompletedTask || !canEditTasks) ? "" : ' title="Click to change owners"'}>
@@ -5249,7 +5715,9 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                   </div>
                   <div class="actions">
                     ${(isCompletedTask || !canEditTasks) ? "" : '<button class="icon-btn edit-btn" type="button" data-permission="tasks.edit">Edit</button>'}
-                    <button class="icon-btn delete-btn" type="button" data-permission="tasks.delete">${isCompletedTask ? "Archive" : "Delete"}</button>
+                    ${isCompletedTask
+                      ? '<button class="icon-btn archive-btn" type="button" data-permission="tasks.archive">Archive</button>'
+                      : '<button class="icon-btn delete-btn" type="button" data-permission="tasks.delete">Delete</button>'}
                   </div>
                 </div>
               `;
@@ -5260,6 +5728,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
               const ownersEl = card.querySelector(".task-owners-quick-trigger");
               const dueEl = card.querySelector(".task-due-quick-trigger");
               const editBtn = card.querySelector(".edit-btn");
+              const archiveBtns = card.querySelectorAll(".archive-btn");
               const deleteBtn = card.querySelector(".delete-btn");
               const updatesExpand = card.querySelector(".task-updates-expand");
               const updatesCollapse = card.querySelector(".task-updates-collapse");
@@ -5290,7 +5759,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
               card.addEventListener("click", e => {
                 if (card.classList.contains("editing") || card.classList.contains("dragging")) return;
-                if (e.target.closest("button, input, select, textarea, .quick-editable-title, .priority-quick-trigger, .task-owners-quick-trigger, .task-due-quick-trigger, .task-updates-expand, .task-update-toggle, .task-update-input, .task-update-save, .task-update-cancel, .edit-btn, .delete-btn, .task-info-btn")) {
+                if (e.target.closest("button, input, select, textarea, .quick-editable-title, .priority-quick-trigger, .task-owners-quick-trigger, .task-due-quick-trigger, .task-updates-expand, .task-update-toggle, .task-update-input, .task-update-save, .task-update-cancel, .edit-btn, .archive-btn, .task-archive-primary, .task-completed-archive-bar, .delete-btn, .task-info-btn")) {
                   return;
                 }
                 openTaskDetailModal(task.id);
@@ -5303,7 +5772,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                 openTaskDetailModal(task.id);
               });
 
-              [infoBtn, editBtn, deleteBtn, updatesExpand, updateToggle, updateCancel, updateSave]
+              [infoBtn, editBtn, deleteBtn, updatesExpand, updateToggle, updateCancel, updateSave, ...archiveBtns]
                 .filter(Boolean)
                 .forEach(btn => {
                 btn.draggable = false;
@@ -5763,41 +6232,23 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                 renderTaskCardEditor();
               });
 
-              deleteBtn.addEventListener("click", e => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!can("tasks.delete")) return;
-                card.draggable = false;
-
-                if (isCompletedTask) {
-                  archivedTasks.push({
-                    ...task,
-                    archivedId: crypto.randomUUID(),
-                    archivedAt: new Date().toISOString()
-                  });
-
-                  tasks = tasks.filter(t => t.id !== task.id);
-                  persistTasksLocally();
-                  saveArchivedTasks();
-                  void trackerSync.syncTaskArchive(task.id);
-                  render();
-                  return;
-                }
-
-                deletedTasks.push({
-                  ...task,
-                  previousStatus: task.status,
-                  deletedAt: new Date().toISOString()
+              archiveBtns.forEach(archiveBtn => {
+                archiveBtn.addEventListener("click", e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  archiveTaskFromBoard(task);
                 });
-
-                tasks = tasks.filter(t => t.id !== task.id);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-                localStorage.setItem(TRASH_STORAGE_KEY, JSON.stringify(deletedTasks));
-                localStorage.setItem(LAST_MODIFIED_STORAGE_KEY, new Date().toISOString());
-                updateTrashCount();
-                void trackerSync.syncTaskDelete(task.id);
-                render();
               });
+
+              if (deleteBtn) {
+                deleteBtn.addEventListener("click", e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!can("tasks.delete")) return;
+                  card.draggable = false;
+                  openDeleteReasonModal(task);
+                });
+              }
             }
 
             function renderTaskCardEditor() {
@@ -5819,7 +6270,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
                     </div>
 
                     <div>
-                      <label>Owners <span class="optional-label">(optional — leave empty for Unassigned)</span></label>
+                      <label>Owners <span class="optional-label">(optional, leave empty for Unassigned)</span></label>
                       <details class="card-edit-owner owner-checklist">
                         ${ownerChecklistInnerHtml(task.team || currentFilter, taskOwners(task))}
                       </details>
@@ -5901,7 +6352,11 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
 
             card.addEventListener("dragstart", e => {
-              if (card.classList.contains("editing") || !can("tasks.move")) {
+              if (
+                card.classList.contains("editing") ||
+                !can("tasks.move") ||
+                task.status === "Done"
+              ) {
                 e.preventDefault();
                 return;
               }
@@ -6011,9 +6466,15 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           board.appendChild(column);
         });
 
-        updateOngoingCount();
+        updateSidebarTaskCounts();
         if (ongoingView.classList.contains("active")) {
           renderOngoingActivity();
+        }
+        if (completedTasksView.classList.contains("active")) {
+          renderCompletedTasks();
+        }
+        if (archivedView?.classList.contains("active")) {
+          renderArchivedTasks();
         }
 
         applyPermissionGating();
@@ -6043,7 +6504,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           sidebarFooter.classList.toggle("is-collapsed", !willExpand);
           sidebarFooterPanel.hidden = !willExpand;
           sidebarFooterToggle.setAttribute("aria-expanded", willExpand ? "true" : "false");
-          sidebarFooterToggle.title = willExpand ? "Hide account & backup" : "Show account & backup";
+          sidebarFooterToggle.title = willExpand ? "Hide account" : "Account";
         });
       }
 
@@ -6070,14 +6531,14 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         void persistPermissionMatrix();
       });
 
-      exportDataBtn.addEventListener("click", exportBackup);
+      exportDataBtn?.addEventListener("click", exportBackup);
 
-      importDataBtn.addEventListener("click", () => {
+      importDataBtn?.addEventListener("click", () => {
         setBackupStatus("");
-        importDataInput.click();
+        importDataInput?.click();
       });
 
-      importDataInput.addEventListener("change", () => {
+      importDataInput?.addEventListener("change", () => {
         importBackupFile(importDataInput.files?.[0]);
       });
 
@@ -6107,16 +6568,33 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
             }
           }
         });
+        updateSettingsPageVisibility();
       }
 
       function updateSidebarBrandMark() {
         const allowed = canAccessSettings();
         sidebarBrandMark.classList.toggle("is-admin-interactive", allowed);
-        sidebarBrandMark.setAttribute("aria-label", allowed ? "Open permissions settings" : "Task Tracker");
+        const settingsLabel = can("settings.editPermissions")
+          ? "Open settings"
+          : can("backup.export") || can("backup.import")
+            ? "Open backup settings"
+            : "Open settings";
+        sidebarBrandMark.setAttribute("aria-label", allowed ? settingsLabel : "Task Tracker");
         if (!allowed && settingsView.classList.contains("active")) switchWorkspaceView("tasks");
       }
 
-      function switchWorkspaceView(viewName) {
+      function syncTrackerUrlForView(viewName, replace = false) {
+        const path = TRACKER_VIEW_PATHS[viewName] ?? "/";
+        if (window.location.pathname === path) return;
+        const state = { trackerView: viewName };
+        if (replace) {
+          window.history.replaceState(state, "", path);
+        } else {
+          window.history.pushState(state, "", path);
+        }
+      }
+
+      function switchWorkspaceView(viewName, options = {}) {
         if (viewName === "settings" && !canAccessSettings()) viewName = "tasks";
 
         const views = {
@@ -6126,28 +6604,36 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           teams: teamsView,
           schedule: scheduleView,
           completedTasks: completedTasksView,
+          archived: archivedView,
           ongoing: ongoingView,
           trash: trashView,
           settings: settingsView
         };
 
-        Object.values(views).forEach(view => view.classList.remove("active"));
-        views[viewName].classList.add("active");
+        const activeView = views[viewName] ?? views.tasks;
+        if (!views[viewName]) viewName = "tasks";
+
+        Object.values(views).forEach(view => view?.classList.remove("active"));
+        activeView?.classList.add("active");
+
+        if (options.skipUrlSync !== true) {
+          syncTrackerUrlForView(viewName, options.replaceUrl === true);
+        }
 
         const orgTeamsNavBtn = document.getElementById("manageOrgTeamsBtn");
         const staffNavBtn = document.getElementById("manageStaffBtn");
         const teamsNavBtn = document.getElementById("manageTeamsBtn");
-        const completedTasksNavBtn = document.getElementById("completedTasksBtn");
         const trashNavBtn = document.getElementById("trashBtn");
 
-        [tasksNavBtn, orgTeamsNavBtn, staffNavBtn, teamsNavBtn, scheduleNavBtn, completedTasksNavBtn, ongoingNavBtn, trashNavBtn, sidebarBrandMark]
+        [tasksNavBtn, orgTeamsNavBtn, staffNavBtn, teamsNavBtn, scheduleNavBtn, completedTasksNavBtn, archivedNavBtn, ongoingNavBtn, trashNavBtn, sidebarBrandMark]
+          .filter(Boolean)
           .forEach(btn => btn.classList.remove("active"));
 
         if (viewName === "tasks") {
           tasksNavBtn.classList.add("active");
           taskFilters.classList.remove("task-filters-hidden");
           workspaceTitle.textContent = "Company Task Tracker";
-          workspaceSubtitle.textContent = "Combine project, team, and team member filters, then manage tasks by status";
+          workspaceSubtitle.textContent = "Filter by project, then manage tasks by status";
         } else if (viewName === "orgTeams") {
           orgTeamsNavBtn.classList.add("active");
           taskFilters.classList.add("task-filters-hidden");
@@ -6182,14 +6668,20 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         } else if (viewName === "completedTasks") {
           completedTasksNavBtn.classList.add("active");
           taskFilters.classList.add("task-filters-hidden");
-          workspaceTitle.textContent = "Completed Tasks";
-          workspaceSubtitle.textContent = "A permanent log of finished, archived work";
+          workspaceTitle.textContent = "Completed";
+          workspaceSubtitle.textContent = "Done tasks still on the board. Archive when fully closed.";
           renderCompletedTasks();
+        } else if (viewName === "archived") {
+          archivedNavBtn?.classList.add("active");
+          taskFilters.classList.add("task-filters-hidden");
+          workspaceTitle.textContent = "Archived";
+          workspaceSubtitle.textContent = "Permanent record of closed work";
+          renderArchivedTasks();
         } else if (viewName === "ongoing") {
           ongoingNavBtn.classList.add("active");
           taskFilters.classList.add("task-filters-hidden");
           workspaceTitle.textContent = "Ongoing Activity";
-          workspaceSubtitle.textContent = "Projects in flight — expand to see employee stats and open tasks";
+          workspaceSubtitle.textContent = "Projects in flight. Expand to see employee stats and open tasks.";
           renderOngoingActivity();
         } else if (viewName === "trash") {
           trashNavBtn.classList.add("active");
@@ -6200,9 +6692,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         } else if (viewName === "settings") {
           sidebarBrandMark.classList.add("active");
           taskFilters.classList.add("task-filters-hidden");
-          workspaceTitle.textContent = "Permissions & Access";
-          workspaceSubtitle.textContent = "Configure roles and the permission matrix, and assign roles to Team Members.";
+          workspaceTitle.textContent = "Settings";
+          workspaceSubtitle.textContent = "Backup, restore, and configure role permissions.";
           renderSettingsView();
+          updateSettingsPageVisibility();
         }
 
         closeMobileSidebar();
@@ -6289,43 +6782,19 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         });
       }
 
-      // Project and Team describe overlapping groupings, so only one narrows the
-      // board at a time. Team Member stacks with whichever is active.
       teamFilter.addEventListener("change", () => {
         currentFilter = teamFilter.value;
-
-        if (currentFilter !== "All") {
-          currentOrgTeamFilter = "All";
-          orgTeamFilter.value = "All";
-        }
-
         render();
       });
 
-      orgTeamFilter.addEventListener("change", () => {
-        currentOrgTeamFilter = orgTeamFilter.value;
-
-        if (currentOrgTeamFilter !== "All") {
-          currentFilter = "All";
-          teamFilter.value = "All";
-        }
-
-        render();
+      completedProjectFilter?.addEventListener("change", () => {
+        completedProjectFilterValue = completedProjectFilter.value;
+        renderCompletedTasks();
       });
 
-      staffFilter.addEventListener("change", () => {
-        currentStaffFilter = staffFilter.value;
-        render();
-      });
-
-      clearFiltersBtn.addEventListener("click", () => {
-        currentFilter = "All";
-        currentOrgTeamFilter = "All";
-        currentStaffFilter = "All";
-        teamFilter.value = "All";
-        orgTeamFilter.value = "All";
-        staffFilter.value = "All";
-        render();
+      archivedProjectFilter?.addEventListener("change", () => {
+        archivedProjectFilterValue = archivedProjectFilter.value;
+        renderArchivedTasks();
       });
 
       scheduleProjectFilter.addEventListener("change", () => {
@@ -6347,10 +6816,6 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         scheduleOrgTeamFilter.value = "All";
         updateScheduleFilterControls();
         renderScheduleView({ preserveScroll: true });
-      });
-
-      tasksNavBtn.addEventListener("click", () => {
-        switchWorkspaceView("tasks");
       });
 
       sidebarBrandMark.addEventListener("click", () => {
@@ -6379,9 +6844,50 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         switchWorkspaceView("trash");
       });
 
-      document.getElementById("completedTasksBtn").addEventListener("click", () => {
+      completedTasksNavBtn?.addEventListener("click", event => {
+        if (completedTasksNavBtn.tagName === "A") event.preventDefault();
         switchWorkspaceView("completedTasks");
       });
+
+      if (archivedNavBtn) {
+        archivedNavBtn.addEventListener("click", event => {
+          if (archivedNavBtn.tagName === "A") event.preventDefault();
+          switchWorkspaceView("archived");
+        });
+      }
+
+      tasksNavBtn?.addEventListener("click", event => {
+        if (tasksNavBtn.tagName === "A") event.preventDefault();
+        switchWorkspaceView("tasks");
+      });
+
+      window.addEventListener("popstate", () => {
+        switchWorkspaceView(trackerViewFromPathname(window.location.pathname), { skipUrlSync: true });
+      });
+
+      if (deleteReasonConfirmBtn) {
+        deleteReasonConfirmBtn.addEventListener("click", () => {
+          const task = tasks.find(t => t.id === pendingDeleteTaskId);
+          const reason = deleteReasonInput?.value || "";
+          if (!reason.trim()) {
+            deleteReasonInput?.focus();
+            return;
+          }
+          if (task) deleteTaskWithReason(task, reason);
+          closeDeleteReasonModal();
+        });
+      }
+      if (deleteReasonCancelBtn) {
+        deleteReasonCancelBtn.addEventListener("click", () => closeDeleteReasonModal());
+      }
+      if (deleteReasonModalClose) {
+        deleteReasonModalClose.addEventListener("click", () => closeDeleteReasonModal());
+      }
+      if (deleteReasonModalBackdrop) {
+        deleteReasonModalBackdrop.addEventListener("click", event => {
+          if (event.target === deleteReasonModalBackdrop) closeDeleteReasonModal();
+        });
+      }
 
       ongoingNavBtn.addEventListener("click", () => {
         switchWorkspaceView("ongoing");
@@ -6493,6 +6999,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           closeTaskDetailModal();
           return;
         }
+        if (event.key === "Escape" && deleteReasonModalBackdrop && !deleteReasonModalBackdrop.hidden) {
+          closeDeleteReasonModal();
+          return;
+        }
         if (event.key === "Escape" && !scheduleModalBackdrop.hidden) {
           closeScheduleModal();
         }
@@ -6563,7 +7073,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
           );
         }
         updateTrashCount();
-        updateArchivedCount();
+        updateSidebarTaskCounts();
         updateOngoingCount();
         populateTeamFilter();
         populateOrgTeamFilter();
@@ -6655,6 +7165,8 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
         applyWorkspaceData: reloadWorkspaceState,
         render,
         renderTrash,
+        renderCompletedTasks,
+        renderArchivedTasks,
         renderScheduleView,
         setBackupStatus,
         onNotificationCreated: (notification) => {
@@ -6688,7 +7200,7 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
 
       if (preloadData) {
         updateTrashCount();
-        updateArchivedCount();
+        updateSidebarTaskCounts();
         updateOngoingCount();
       } else {
         // Persist locally only — do not schedule API sync before trackerSync.init()
@@ -6707,7 +7219,10 @@ export function initTrackerApp(options: TrackerInitOptions = {}) {
       render();
       updateSidebarBrandMark();
       applyPermissionGating();
-      switchWorkspaceView("tasks");
+      const bootView =
+        options.initialView ??
+        trackerViewFromPathname(window.location.pathname);
+      switchWorkspaceView(bootView, { replaceUrl: true });
       initializeFolderPersistence();
       trackerSync.init(initialWorkspaceRevision);
 

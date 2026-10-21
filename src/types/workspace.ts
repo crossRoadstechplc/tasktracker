@@ -13,6 +13,11 @@ export type TaskUpdate = {
   createdAt: string;
 };
 
+export type TaskStatusHistoryEntry = {
+  status: TaskStatusLabel;
+  at: string;
+};
+
 export type LegacyTask = {
   id: string;
   title: string;
@@ -24,12 +29,15 @@ export type LegacyTask = {
   due: string;
   status: TaskStatusLabel;
   updates: TaskUpdate[];
+  /** Recorded when status changes (drag/drop); used for lifecycle timeline. */
+  statusHistory?: TaskStatusHistoryEntry[];
 };
 
 export type DeletedTask = LegacyTask & {
   trashId?: string;
   previousStatus: string;
   deletedAt: string;
+  deleteReason?: string;
 };
 
 export type ArchivedTask = LegacyTask & {
