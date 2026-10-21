@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 function EyeIcon({ visible }: { visible: boolean }) {
   if (visible) {
-    // Password is visible → show "hide" (slashed eye)
     return (
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
         <path
@@ -104,67 +103,95 @@ export function LoginForm() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
-        <div className="brand">
-          <p className="login-eyebrow">Workforce Platform</p>
-          <h1>Task Tracker</h1>
-          <p>Sign in with your Workforce email or employee code — same account as the admin portal / employee app.</p>
-        </div>
-
-        <form className="login-form" onSubmit={handleSubmit}>
-          <div className="login-field">
-            <label htmlFor="login-email">Email</label>
-            <input
-              id="login-email"
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@company.com"
-              required
-            />
+      <div className="login-shell">
+        <section className="login-intro" aria-labelledby="login-intro-title">
+          <div className="login-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28">
+              <path
+                d="M5 12.5l4 4L19 7.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
+          <p className="login-eyebrow">Workforce Platform</p>
+          <h1 id="login-intro-title">Task Tracker</h1>
+          <p className="login-lead">
+            Sign in with your Workforce email or employee code.
+          </p>
+          <p className="login-hint">
+            Same account as the admin portal and employee app.
+          </p>
+          <ul className="login-features">
+            <li>Tasks and project boards</li>
+            <li>Schedule and team updates</li>
+          </ul>
+        </section>
 
-          <div className="login-field">
-            <label htmlFor="login-password">Password</label>
-            <div className="login-password-wrap">
+        <div className="login-card">
+          <h2 className="login-form-title">Sign in</h2>
+          <p className="login-form-sub">Enter your credentials to continue.</p>
+
+          <form className="login-form" onSubmit={handleSubmit}>
+            <div className="login-field">
+              <label htmlFor="login-email">Email</label>
               <input
-                id="login-password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter your password"
+                id="login-email"
+                className="login-input"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@company.com"
                 required
               />
-              <button
-                type="button"
-                className="login-password-toggle"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setShowPassword((value) => !value);
-                }}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                aria-pressed={showPassword}
-                title={showPassword ? "Hide password" : "Show password"}
-              >
-                <EyeIcon visible={showPassword} />
-              </button>
             </div>
-          </div>
 
-          {error ? (
-            <p className="backup-status visible error" role="alert">
-              {error}
-            </p>
-          ) : null}
+            <div className="login-field">
+              <label htmlFor="login-password">Password</label>
+              <div className="login-password-wrap">
+                <input
+                  id="login-password"
+                  className="login-input"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="login-password-toggle"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setShowPassword((value) => !value);
+                  }}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  <EyeIcon visible={showPassword} />
+                </button>
+              </div>
+            </div>
 
-          <button className="btn-primary login-submit" type="submit" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+            {error ? (
+              <p className="login-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <button className="btn-primary login-submit" type="submit" disabled={loading}>
+              {loading ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
